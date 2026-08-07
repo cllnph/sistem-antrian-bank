@@ -1,0 +1,181 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use Illuminate\View\View;
+
+class RoleController extends Controller
+{
+    /**
+     * Display a listing of roles with 10-module permission matrix and user counts.
+     */
+    public function index(): View
+    {
+        abort_if(!auth()->user()->can('view_control_center'), 403);
+
+        $roleModelClass = config('permission.models.role', \Spatie\Permission\Models\Role::class);
+        $roles = $roleModelClass::with(['permissions'])->get();
+        
+        $permissions = \Spatie\Permission\Models\Permission::all();
+        $groupedPermissions = $permissions->groupBy(fn ($item) => $item->module ?? 'Lainnya');
+
+        return view('admin.roles.index', compact('roles', 'permissions', 'groupedPermissions'));
+    }
+
+    /**
+     * Store a newly created role via standard form submit.
+     */
+    public function store(Request $request): RedirectResponse
+    {
+        abort_if(!auth()->user()->can('view_control_center'), 403);
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255', 'unique:roles,name'],
+            'description' => ['nullable', 'string', 'max:500'],
+            'permissions' => ['required', 'array', 'min:1'],
+        ], [
+            'permissions.required' => 'Minimal harus memilih 1 hak akses otorisasi.',
+            'permissions.min' => 'Minimal harus memilih 1 hak akses otorisasi.',
+            'name.unique' => 'Nama role ini sudah terdaftar dalam sistem.',
+        ]);
+
+        $roleSlug = Str::slug(strtolower($validated['name']), '_');
+        $roleModelClass = config('permission.models.role', \Spatie\Permission\Models\Role::class);
+        $role = $roleModelClass::findOrCreate($roleSlug);
+
+        if (!empty($validated['permissions'])) {
+            $permModels = [];
+            foreach ($validated['permissions'] as $permName) {
+                $permModels[] = \Spatie\Permission\Models\Permission::findOrCreate($permName);
+            }
+            $role->syncPermissions($permModels);
+        }
+
+        Log::info("Banking Audit Trail: Admin created new Role '{$role->name}' with " . count($validated['permissions']) . " permissions.");
+
+        return back()->with('status', "Role baru '" . ucfirst(str_replace('_', ' ', $validated['name'])) . "' berhasil disimpan ke database.");
+    }
+
+    /**
+     * Store a newly created role via AJAX JSON API.
+     */
+    public function storeApi(Request $request): JsonResponse
+    {
+        abort_if(!auth()->user()->can('view_control_center'), 403);
+
+        try {
+            $validated = $request->validate([
+                'name' => ['required', 'string', 'max:255', 'unique:roles,name'],
+                'description' => ['nullable', 'string', 'max:500'],
+                'permissions' => ['required', 'array', 'min:1'],
+            ], [
+                'permissions.required' => 'Minimal harus memilih 1 hak akses otorisasi.',
+                'permissions.min' => 'Minimal harus memilih 1 hak akses otorisasi.',
+                'name.unique' => 'Nama role ini sudah terdaftar dalam sistem.',
+            ]);
+
+            $roleSlug = Str::slug(strtolower($validated['name']), '_');
+            $roleModelClass = config('permission.models.role', \Spatie\Permission\Models\Role::class);
+            $role = $roleModelClass::findOrCreate($roleSlug);
+
+            if (!empty($validated['permissions'])) {
+                $permModels = [];
+                foreach ($validated['permissions'] as $permName) {
+                    $permModels[] = \Spatie\Permission\Models\Permission::findOrCreate($permName);
+                }
+                $role->syncPermissions($permModels);
+            }
+
+            Log::info("Banking Audit Trail: Admin created new Role '{$role->name}' via AJAX API.");
+
+            return response()->json([
+                'success' => true,
+                'message' => "Role baru '" . ucfirst(str_replace('_', ' ', $validated['name'])) . "' berhasil disimpan ke database.",
+                'role' => [
+                    'id' => $role->id,
+                    'name' => $role->name,
+                    'display_name' => ucfirst(str_replace('_', ' ', $validated['name'])),
+                ],
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal: ' . implode(', ', \Illuminate\Support\Arr::flatten($e->errors())),
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan sistem: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Update permissions for a specified role.
+     */
+    public function update(Request $request, int $id): RedirectResponse
+    {
+        abort_if(!auth()->user()->can('view_control_center'), 403);
+
+        $roleModelClass = config('permission.models.role', \Spatie\Permission\Models\Role::class);
+        $role = $roleModelClass::findOrFail($id);
+
+        $validated = $request->validate([
+            'permissions' => ['required', 'array', 'min:1'],
+        ], [
+            'permissions.required' => 'Minimal harus memilih 1 hak akses otorisasi.',
+            'permissions.min' => 'Minimal harus memilih 1 hak akses otorisasi.',
+        ]);
+
+        $permModels = [];
+        foreach ($validated['permissions'] as $permName) {
+            $permModels[] = \Spatie\Permission\Models\Permission::findOrCreate($permName);
+        }
+
+        $role->syncPermissions($permModels);
+
+        Log::info("Banking Audit Trail: Admin updated permissions for Role '{$role->name}'.");
+
+        return back()->with('status', "Hak akses untuk role '" . ucfirst(str_replace('_', ' ', $role->name)) . "' berhasil diperbarui.");
+    }
+
+    /**
+     * Remove the specified role with active user check (Only primary Admin is permanent).
+     */
+    public function destroy(int $id): RedirectResponse
+    {
+        abort_if(!auth()->user()->can('view_control_center'), 403);
+        $roleModelClass = config('permission.models.role', \Spatie\Permission\Models\Role::class);
+        $role = $roleModelClass::findOrFail($id);
+
+        // Protect primary administrator role from deletion
+        if (in_array(strtolower($role->name), ['admin', 'administrator', 'super_admin'])) {
+            return back()->withErrors([
+                'role_error' => "Role Administrator Utama bersifat permanen dan tidak dapat dihapus dari sistem.",
+            ]);
+        }
+
+        // Check if role is assigned to active users
+        $userCount = \App\Models\User::where('role', $role->name)
+            ->orWhereHas('roles', fn ($q) => $q->where('roles.id', $role->id))
+            ->count();
+
+        if ($userCount > 0) {
+            return back()->withErrors([
+                'role_error' => "Role '" . ucfirst(str_replace('_', ' ', $role->name)) . "' tidak dapat dihapus karena sedang digunakan oleh {$userCount} pengguna aktif. Silakan ubah role pengguna tersebut terlebih dahulu.",
+            ]);
+        }
+
+        $roleName = ucfirst(str_replace('_', ' ', $role->name));
+        $role->delete();
+
+        Log::warning("Banking Audit Trail: Admin deleted Role '{$roleName}'.");
+
+        return back()->with('status', "Role '{$roleName}' berhasil dihapus dari sistem.");
+    }
+}
