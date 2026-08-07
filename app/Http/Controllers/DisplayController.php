@@ -67,6 +67,7 @@ class DisplayController extends Controller
             ->where('service_setting_id', $serviceSettingId)
             ->where('status', QueueStatus::CALLED)
             ->orderBy('called_at', 'desc')
+            ->take(10)
             ->get();
 
         $latest = $queues->first();

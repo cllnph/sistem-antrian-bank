@@ -359,7 +359,10 @@
             }, 600);
         }
 
+        let isFetching = false;
         async function refreshData() {
+            if (isFetching) return;
+            isFetching = true;
             try {
                 const response = await fetch('/api/display/data');
                 const data = await response.json();
@@ -397,6 +400,8 @@
                 }
             } catch(e) {
                 console.error('Fetch error:', e);
+            } finally {
+                isFetching = false;
             }
         }
 
