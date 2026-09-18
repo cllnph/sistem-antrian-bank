@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Sign in — PT BPR DP TASPEN Admin Portal</title>
+
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -53,8 +54,8 @@
                 
                 <!-- TOP BRAND LOGO (Center) -->
                 <div class="flex flex-col items-center justify-center mb-8">
-                    <div class="bg-white p-4 px-8 rounded-2xl border border-slate-200 shadow-md mb-4 inline-flex items-center justify-center">
-                        @include('components.bank-logo', ['size' => '56px'])
+                    <div class="bg-white p-5 px-10 rounded-2xl border border-slate-200 shadow-md mb-4 inline-flex items-center justify-center">
+                        @include('components.bank-logo', ['size' => '76px'])
                     </div>
                     <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight font-heading mt-2">Sign in</h1>
                     <p class="text-xs font-semibold text-slate-500 mt-1 text-center">Masuk ke Panel Administrasi & Operasional Perbankan</p>

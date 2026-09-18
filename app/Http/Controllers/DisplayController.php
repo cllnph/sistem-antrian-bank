@@ -17,64 +17,123 @@ class DisplayController extends Controller
 
     public function getDisplayData(): JsonResponse
     {
-        $settings = ServiceSetting::query()->get()->keyBy('service');
+        $activeSettings = ServiceSetting::query()->where('is_active', true)->get();
+        $allSettings = ServiceSetting::query()->get();
+        $settingIds = $activeSettings->pluck('id')->toArray();
+
+        $today = now()->toDateString();
+
+        $csIds = $allSettings->where('service', 'cs')->pluck('id')->toArray();
+        $tellerIds = $allSettings->where('service', 'teller')->pluck('id')->toArray();
+        $umumIds = $allSettings->where('service', 'umum')->pluck('id')->toArray();
+
+        $csWaitCount = empty($csIds) ? 0 : Queue::query()
+            ->withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+            ->whereIn('service_setting_id', $csIds)
+            ->whereDate('created_at', $today)
+            ->where('status', QueueStatus::WAITING)
+            ->count();
+
+        $tellerWaitCount = empty($tellerIds) ? 0 : Queue::query()
+            ->withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+            ->whereIn('service_setting_id', $tellerIds)
+            ->whereDate('created_at', $today)
+            ->where('status', QueueStatus::WAITING)
+            ->count();
+
+        $umumWaitCount = empty($umumIds) ? 0 : Queue::query()
+            ->withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+            ->whereIn('service_setting_id', $umumIds)
+            ->whereDate('created_at', $today)
+            ->where('status', QueueStatus::WAITING)
+            ->count();
+
+        // Single query for all CALLED queues grouped by service_setting_id
+        $calledQueues = empty($settingIds) ? collect() : Queue::query()
+            ->withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+            ->with(['servedBy.serviceSetting'])
+            ->whereIn('service_setting_id', $settingIds)
+            ->whereDate('created_at', $today)
+            ->where('status', QueueStatus::CALLED)
+            ->orderBy('called_at', 'desc')
+            ->get()
+            ->groupBy('service_setting_id');
+
+        $countersData = [];
+        foreach ($activeSettings as $setting) {
+            $queues = $calledQueues->get($setting->id);
+            $latest = $queues?->first();
+
+            $waitCount = match ($setting->service) {
+                'cs' => $csWaitCount,
+                'teller' => $tellerWaitCount,
+                'umum' => $umumWaitCount,
+                default => 0,
+            };
+
+            $labelName = match ($setting->service) {
+                'cs' => 'CUSTOMER SERVICE & KREDIT PENSIUN',
+                'teller' => 'TELLER TABUNGAN & PENSIUN TASPEN',
+                'umum' => 'LAYANAN UMUM',
+                default => strtoupper($setting->label ?? 'LAYANAN'),
+            };
+
+            $countersData[] = [
+                'id' => $setting->id,
+                'service' => $setting->service,
+                'label' => $labelName,
+                'counter_name' => $setting->counter_name,
+                'is_active' => (bool) $setting->is_active,
+                'current_number' => $latest?->number ?? '-',
+                'served_by_name' => $latest?->servedBy?->name ?? 'Belum Dipanggil',
+                'waiting_count' => $waitCount,
+                'called_at' => $latest?->called_at?->toIso8601String(),
+            ];
+        }
+
+        $csSetting = $activeSettings->firstWhere('service', 'cs');
+        $tellerSetting = $activeSettings->firstWhere('service', 'teller');
+        $umumSetting = $activeSettings->firstWhere('service', 'umum');
 
         return response()->json([
-            'cs' => $this->currentQueue($settings->get('cs')?->id, $settings->get('cs')?->counter_name ?? 'Loket CS'),
-            'teller' => $this->currentQueue($settings->get('teller')?->id, $settings->get('teller')?->counter_name ?? 'Loket Teller'),
-            'umum' => $this->currentQueue($settings->get('umum')?->id, $settings->get('umum')?->counter_name ?? 'Loket Umum'),
+            'counters' => $countersData,
+            'total_active' => count($countersData),
+            'cs' => $this->formatQueueData($calledQueues->get($csSetting?->id), $csSetting?->counter_name ?? 'Loket CS'),
+            'teller' => $this->formatQueueData($calledQueues->get($tellerSetting?->id), $tellerSetting?->counter_name ?? 'Loket Teller'),
+            'umum' => $this->formatQueueData($calledQueues->get($umumSetting?->id), $umumSetting?->counter_name ?? 'Loket Umum'),
             'waiting' => [
-                'cs' => $this->waitingCount($settings->get('cs')?->id),
-                'teller' => $this->waitingCount($settings->get('teller')?->id),
-                'umum' => $this->waitingCount($settings->get('umum')?->id),
+                'cs' => $csWaitCount,
+                'teller' => $tellerWaitCount,
+                'umum' => $umumWaitCount,
             ],
             'settings' => [
                 'cs' => [
-                    'label' => $settings->get('cs')?->label ?? 'Customer Service',
-                    'counter_name' => $settings->get('cs')?->counter_name ?? 'Loket CS',
-                    'is_active' => $settings->get('cs')?->is_active ?? true,
+                    'label' => $csSetting?->label ?? 'Customer Service',
+                    'counter_name' => $csSetting?->counter_name ?? 'Loket CS',
+                    'is_active' => $csSetting?->is_active ?? true,
                 ],
                 'teller' => [
-                    'label' => $settings->get('teller')?->label ?? 'Teller',
-                    'counter_name' => $settings->get('teller')?->counter_name ?? 'Loket Teller',
-                    'is_active' => $settings->get('teller')?->is_active ?? true,
+                    'label' => $tellerSetting?->label ?? 'Teller',
+                    'counter_name' => $tellerSetting?->counter_name ?? 'Loket Teller',
+                    'is_active' => $tellerSetting?->is_active ?? true,
                 ],
                 'umum' => [
-                    'label' => $settings->get('umum')?->label ?? 'Layanan Umum',
-                    'counter_name' => $settings->get('umum')?->counter_name ?? 'Loket Umum',
-                    'is_active' => $settings->get('umum')?->is_active ?? true,
+                    'label' => $umumSetting?->label ?? 'Layanan Umum',
+                    'counter_name' => $umumSetting?->counter_name ?? 'Loket Umum',
+                    'is_active' => $umumSetting?->is_active ?? true,
                 ],
             ],
         ]);
     }
 
-    private function waitingCount(?int $serviceSettingId): int
+    private function formatQueueData(?\Illuminate\Support\Collection $queues, string $defaultCounterName): ?array
     {
-        if (!$serviceSettingId) return 0;
-
-        return Queue::query()
-            ->where('service_setting_id', $serviceSettingId)
-            ->where('status', QueueStatus::WAITING)
-            ->count();
-    }
-
-    private function currentQueue(?int $serviceSettingId, string $defaultCounterName): ?array
-    {
-        if (!$serviceSettingId) return null;
-
-        $queues = Queue::query()
-            ->with(['servedBy.serviceSetting'])
-            ->where('service_setting_id', $serviceSettingId)
-            ->where('status', QueueStatus::CALLED)
-            ->orderBy('called_at', 'desc')
-            ->take(10)
-            ->get();
-
-        $latest = $queues->first();
-
-        if (! $latest) {
+        if (! $queues || $queues->isEmpty()) {
             return null;
         }
+
+        $queues = $queues->take(10);
+        $latest = $queues->first();
 
         return [
             'number' => $latest->number,

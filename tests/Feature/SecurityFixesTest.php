@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\Loket;
 use App\Models\Queue;
 use App\Models\ServiceSetting;
 use App\Models\User;
@@ -25,7 +24,7 @@ class SecurityFixesTest extends TestCase
     #[Test]
     public function test_route_authorization_middleware_blocks_unauthorized_roles(): void
     {
-        $teller = User::factory()->create(['role' => 'teller']);
+        $teller = User::factory()->create();
         $teller->assignRole('teller');
 
         $this->actingAs($teller)->get('/admin/users')->assertForbidden();
@@ -33,7 +32,7 @@ class SecurityFixesTest extends TestCase
         $this->actingAs($teller)->get('/admin/lokets')->assertForbidden();
         $this->actingAs($teller)->get('/admin')->assertForbidden();
 
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create();
         $admin->assignRole('admin');
 
         $this->actingAs($admin)->get('/admin/users')->assertOk();
@@ -53,7 +52,7 @@ class SecurityFixesTest extends TestCase
         $this->assertFalse($csRole->hasPermissionTo('access_admin_panel'));
         $this->assertTrue($csRole->hasPermissionTo('view_any_queue'));
 
-        $teller = User::factory()->create(['role' => 'teller']);
+        $teller = User::factory()->create();
         $teller->assignRole('teller');
 
         $this->assertTrue($teller->canAccessPanel(new \Filament\Panel()));
@@ -62,13 +61,13 @@ class SecurityFixesTest extends TestCase
     #[Test]
     public function test_two_layer_authorization_on_loket_controller(): void
     {
-        $loket1 = ServiceSetting::create(['counter_name' => 'Loket 1', 'service' => 'teller']);
-        $loket2 = ServiceSetting::create(['counter_name' => 'Loket 2', 'service' => 'teller']);
+        $loket1 = ServiceSetting::create(['label' => 'Loket 1', 'counter_name' => 'Loket 1', 'service' => 'teller']);
+        $loket2 = ServiceSetting::create(['label' => 'Loket 2', 'counter_name' => 'Loket 2', 'service' => 'teller']);
 
         $user = User::factory()->create([
-            'role' => 'teller',
             'service_setting_id' => $loket1->id,
         ]);
+        $user->assignRole('teller');
         $user->givePermissionTo('edit_service_setting');
 
         $this->actingAs($user)
@@ -105,11 +104,28 @@ class SecurityFixesTest extends TestCase
     }
 
     #[Test]
+    public function test_inactive_logged_in_user_is_automatically_logged_out_by_middleware(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'disabled@bank.com',
+            'password' => bcrypt('password123'),
+            'is_active' => false,
+        ]);
+        $user->assignRole('teller');
+
+        $response = $this->actingAs($user)->get('/admin/queues');
+
+        $response->assertRedirect('/admin/login');
+        $this->assertGuest();
+    }
+
+    #[Test]
     public function test_password_reset_flash_message_does_not_leak_plaintext_password(): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create();
         $admin->assignRole('admin');
-        $targetUser = User::factory()->create(['role' => 'teller']);
+        $targetUser = User::factory()->create();
+        $targetUser->assignRole('teller');
 
         $response = $this->actingAs($admin)
             ->post(route('admin.users.reset-password', $targetUser->id), [
@@ -124,6 +140,8 @@ class SecurityFixesTest extends TestCase
     #[Test]
     public function test_queue_store_number_prevents_race_conditions(): void
     {
+        ServiceSetting::create(['label' => 'Loket Teller', 'counter_name' => 'Loket Teller', 'service' => 'teller', 'is_active' => true]);
+
         $response = $this->post(route('queue.store-number'), ['service' => 'teller']);
         $response->assertSessionHas('ticket');
         $ticket1 = session('ticket');
@@ -138,12 +156,16 @@ class SecurityFixesTest extends TestCase
     #[Test]
     public function test_display_tv_multi_counter_returns_all_called_queues(): void
     {
-        $teller1 = User::factory()->create(['role' => 'teller']);
-        $teller2 = User::factory()->create(['role' => 'teller']);
+        $tellerSetting = ServiceSetting::create(['label' => 'Loket Teller', 'counter_name' => 'Loket Teller', 'service' => 'teller', 'is_active' => true]);
+
+        $teller1 = User::factory()->create(['service_setting_id' => $tellerSetting->id]);
+        $teller1->assignRole('teller');
+        $teller2 = User::factory()->create(['service_setting_id' => $tellerSetting->id]);
+        $teller2->assignRole('teller');
 
         Queue::create([
             'number' => 'T-001',
-            'service' => 'teller',
+            'service_setting_id' => $tellerSetting->id,
             'status' => 'called',
             'served_by' => $teller1->id,
             'called_at' => now()->subMinute(),
@@ -151,7 +173,7 @@ class SecurityFixesTest extends TestCase
 
         Queue::create([
             'number' => 'T-002',
-            'service' => 'teller',
+            'service_setting_id' => $tellerSetting->id,
             'status' => 'called',
             'served_by' => $teller2->id,
             'called_at' => now(),
@@ -170,18 +192,20 @@ class SecurityFixesTest extends TestCase
     #[Test]
     public function test_service_type_umum_integration(): void
     {
+        $umumSetting = ServiceSetting::create(['label' => 'Loket Umum', 'counter_name' => 'Loket Umum', 'service' => 'umum', 'is_active' => true]);
+
         $this->post(route('queue.store-number'), ['service' => 'umum'])
             ->assertSessionHas('ticket');
 
         $this->assertDatabaseHas('queues', [
-            'service' => 'umum',
+            'service_setting_id' => $umumSetting->id,
         ]);
     }
 
     #[Test]
     public function test_user_role_validation(): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create();
         $admin->assignRole('admin');
 
         $this->actingAs($admin)
@@ -197,17 +221,18 @@ class SecurityFixesTest extends TestCase
     #[Test]
     public function test_reset_queues_permission_action(): void
     {
-        Queue::create(['number' => 'T-001', 'service' => 'teller']);
+        $tellerSetting = ServiceSetting::create(['label' => 'Loket Teller', 'counter_name' => 'Loket Teller', 'service' => 'teller', 'is_active' => true]);
+        Queue::create(['number' => 'T-001', 'service_setting_id' => $tellerSetting->id]);
         $this->assertDatabaseCount('queues', 1);
 
-        $teller = User::factory()->create(['role' => 'teller']);
+        $teller = User::factory()->create();
         $teller->assignRole('teller');
 
         $this->actingAs($teller)
             ->post(route('admin.queues.reset'))
             ->assertForbidden();
 
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = User::factory()->create();
         $admin->assignRole('admin');
 
         $this->actingAs($admin)

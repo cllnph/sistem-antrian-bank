@@ -192,11 +192,13 @@ class ManageUsers extends ManageRecords
 
                             $role->syncPermissions($permModels);
 
+                            $recipients = \App\Models\User::where('is_active', true)->get();
                             Notification::make()
                                 ->title('Hak Akses Role Berhasil Diperbarui')
-                                ->body('Hak akses untuk role ' . ucfirst(str_replace('_', ' ', $role->name)) . ' telah disimpan ke database.')
+                                ->body('Hak akses untuk role ' . ucfirst(str_replace('_', ' ', $role->name)) . ' telah disimpan ke database oleh ' . auth()->user()?->name)
                                 ->success()
-                                ->send();
+                                ->send()
+                                ->sendToDatabase($recipients);
                         }
                     }
                 }),

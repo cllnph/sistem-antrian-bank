@@ -60,8 +60,9 @@ class RoleAndPermissionSeeder extends Seeder
         // 3. Sync Existing Users in DB to Spatie Pivot Table (model_has_roles)
         $users = User::all();
         foreach ($users as $user) {
-            if (filled($user->role)) {
-                $targetRole = Role::findOrCreate($user->role);
+            $userRole = $user->getAttribute('role');
+            if (filled($userRole)) {
+                $targetRole = Role::findOrCreate($userRole);
                 if (!$user->hasRole($targetRole)) {
                     $user->assignRole($targetRole);
                 }

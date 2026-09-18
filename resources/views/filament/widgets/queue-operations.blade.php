@@ -3,7 +3,7 @@
         <!-- Hero Operational Banner Section -->
         <x-filament::section icon="heroicon-o-building-office-2">
             <x-slot name="heading">
-                PT BPR DP TASPEN — Dashboard {{ auth()->user()?->role === 'admin' ? 'Administrator' : (auth()->user()?->role === 'cs' ? 'Customer Service' : 'Teller') }}
+                PT BPR DP TASPEN — Dashboard {{ auth()->user()?->hasRole('admin') ? 'Administrator' : (auth()->user()?->hasRole('cs') ? 'Customer Service' : 'Teller') }}
             </x-slot>
 
             <x-slot name="description">

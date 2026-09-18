@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Dashboard Operasional — PT BPR DP TASPEN</title>
+
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -160,7 +161,7 @@
                             </div>
                             <div class="text-left hidden md:block">
                                 <div class="text-xs font-bold leading-none" :class="darkMode ? 'text-white' : 'text-slate-900'">{{ Auth::user()?->name ?? 'Administrator' }}</div>
-                                <div class="text-[10px] font-semibold text-brand-gold capitalize mt-1">{{ Auth::user()?->role ?? 'Super Admin' }}</div>
+                                <div class="text-[10px] font-semibold text-brand-gold capitalize mt-1">{{ Auth::user()?->roles->first()?->name ?? 'Super Admin' }}</div>
                             </div>
                             <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />

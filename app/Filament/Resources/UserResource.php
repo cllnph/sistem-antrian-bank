@@ -42,26 +42,6 @@ class UserResource extends Resource
         return $schema->components([
             TextInput::make('name')->label(fn () => __('app.full_name'))->placeholder('Budi Santoso')->required()->maxLength(255),
             TextInput::make('email')->label(fn () => __('app.username_email'))->email()->placeholder('budi.cs@bprdptaspen.co.id')->required()->unique(ignoreRecord: true),
-            TextInput::make('password')
-                ->label(fn () => __('app.password'))
-                ->password()
-                ->autocomplete('new-password')
-                ->revealable()
-                ->minLength(8)
-                ->placeholder(fn (string $operation) => $operation === 'edit' ? __('app.password_placeholder_edit') : '••••••••')
-                ->required(fn (string $operation) => $operation === 'create')
-                ->dehydrated(fn (?string $state) => filled($state)),
-            TextInput::make('password_confirmation')
-                ->label(fn () => __('app.confirm_password'))
-                ->password()
-                ->autocomplete('new-password')
-                ->revealable()
-                ->minLength(8)
-                ->placeholder('••••••••')
-                ->required(fn (string $operation) => $operation === 'create')
-                ->same('password')
-                ->visible(fn (string $operation, $get) => $operation === 'create' || filled($get('password')))
-                ->dehydrated(false),
             Select::make('roles')->label(fn () => __('app.role'))
                 ->relationship('roles', 'name')
                 ->preload()
@@ -180,6 +160,15 @@ class UserResource extends Resource
                 ->searchable()
                 ->preload()
                 ->helperText('Loket tugas spesifik untuk Teller / CS. Administrator mengelola seluruh loket.'),
+            TextInput::make('password')
+                ->label(fn () => __('app.password'))
+                ->password()
+                ->autocomplete('new-password')
+                ->revealable()
+                ->minLength(8)
+                ->placeholder(fn (string $operation) => $operation === 'edit' ? __('app.password_placeholder_edit') : '••••••••')
+                ->required(fn (string $operation) => $operation === 'create')
+                ->dehydrated(fn (?string $state) => filled($state)),
         ]);
     }
 

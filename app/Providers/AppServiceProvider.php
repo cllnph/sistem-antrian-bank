@@ -19,8 +19,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        if (! app()->runningInConsole()) {
+            @ini_set('max_execution_time', '120');
+        }
+
         \Illuminate\Support\Facades\Gate::before(function ($user, $ability) {
-            if ($user->hasRole('admin') || $user->role === 'admin') {
+            if ($user->hasRole('admin')) {
                 return true;
             }
         });
@@ -31,5 +35,8 @@ class AppServiceProvider extends ServiceProvider
                 $event->user->update(['last_login_at' => now()]);
             }
         });
+
+        \App\Models\User::observe(\App\Observers\UserObserver::class);
+        \App\Models\ServiceSetting::observe(\App\Observers\ServiceSettingObserver::class);
     }
 }

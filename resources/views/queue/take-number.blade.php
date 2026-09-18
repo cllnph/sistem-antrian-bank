@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Kiosk Antrean Tiket - PT BPR DP TASPEN</title>
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;800;900&display=swap" rel="stylesheet">
@@ -584,10 +585,10 @@
         @endif
 
         @php
-            $tellerActive = isset($settings['teller']) ? $settings['teller']->is_active : true;
-            $csActive = isset($settings['cs']) ? $settings['cs']->is_active : true;
-            $tellerCounterName = isset($settings['teller']) ? $settings['teller']->counter_name : 'Loket Teller';
-            $csCounterName = isset($settings['cs']) ? $settings['cs']->counter_name : 'Loket CS';
+            $tellerActive = $tellerActive ?? (isset($settings['teller']) ? $settings['teller']->is_active : true);
+            $csActive = $csActive ?? (isset($settings['cs']) ? $settings['cs']->is_active : true);
+            $tellerCounterName = $tellerCounterName ?? (isset($settings['teller']) ? $settings['teller']->counter_name : 'Loket Teller - Kas & Pensiun');
+            $csCounterName = $csCounterName ?? (isset($settings['cs']) ? $settings['cs']->counter_name : 'Loket CS - Kredit & Pensiun');
         @endphp
 
         <form method="POST" action="{{ route('queue.store-number') }}" id="queueForm">
@@ -630,7 +631,7 @@
                         <div class="closed-notice">⚠️ Layanan sedang tidak tersedia saat ini.</div>
                     @endif
 
-                    <button type="button" class="btn-take btn-teller" onclick="showConfirmModal('teller', 'Teller Kas & Pensiun TASPEN', '{{ $tellerCounterName }}', '{{ $tellerEstWait }}', '{{ $nextTellerNumber }}')" {{ !$tellerActive ? 'disabled' : '' }}>
+                    <button type="button" class="btn-take btn-teller" data-service="teller" data-label="Teller Kas & Pensiun TASPEN" data-counter="{{ $tellerCounterName }}" data-wait="{{ $tellerEstWait }}" data-next="{{ $nextTellerNumber }}" onclick="openConfirmModalFromBtn(this)" {{ !$tellerActive ? 'disabled' : '' }}>
                         <span>Ambil Tiket Teller</span>
                         <span>→</span>
                     </button>
@@ -674,7 +675,7 @@
                         <div class="closed-notice">⚠️ Layanan sedang tidak tersedia saat ini.</div>
                     @endif
 
-                    <button type="button" class="btn-take btn-cs" onclick="showConfirmModal('cs', 'CS Kredit & Administrasi Pensiun', '{{ $csCounterName }}', '{{ $csEstWait }}', '{{ $nextCsNumber }}')" {{ !$csActive ? 'disabled' : '' }}>
+                    <button type="button" class="btn-take btn-cs" data-service="cs" data-label="CS Kredit & Administrasi Pensiun" data-counter="{{ $csCounterName }}" data-wait="{{ $csEstWait }}" data-next="{{ $nextCsNumber }}" onclick="openConfirmModalFromBtn(this)" {{ !$csActive ? 'disabled' : '' }}>
                         <span>Ambil Tiket CS</span>
                         <span>→</span>
                     </button>
@@ -1004,6 +1005,15 @@
 
         let selectedServiceKey = '';
 
+        function openConfirmModalFromBtn(btn) {
+            const serviceKey = btn.getAttribute('data-service');
+            const serviceLabel = btn.getAttribute('data-label');
+            const counterName = btn.getAttribute('data-counter');
+            const nextNumber = btn.getAttribute('data-next');
+
+            showConfirmModal(serviceKey, serviceLabel, counterName, '', nextNumber);
+        }
+
         function showConfirmModal(serviceKey, serviceLabel, counterName, waitTime, nextNumber) {
             selectedServiceKey = serviceKey;
             document.getElementById('confirmServiceName').textContent = serviceLabel;
@@ -1046,15 +1056,15 @@
         }
 
         function closeModal() {
-            const overlay = document.getElementById('ticketModalOverlay');
-            if (overlay) {
-                overlay.style.opacity = '0';
-                setTimeout(() => overlay.remove(), 200);
-            }
-            if (window.history.replaceState) {
-                window.history.replaceState(null, null, window.location.pathname);
-            }
+            window.location.href = window.location.pathname;
         }
+
+        // Auto-reset kiosk screen after 12 seconds if customer leaves receipt modal open
+        @if(session('ticket'))
+            setTimeout(function() {
+                closeModal();
+            }, 12000);
+        @endif
     </script>
 </body>
 </html>

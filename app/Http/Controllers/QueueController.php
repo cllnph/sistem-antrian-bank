@@ -45,15 +45,15 @@ class QueueController extends Controller
     public function takeNumber(): View
     {
         $settings = ServiceSetting::query()->get()->keyBy('service');
-        $today = now()->format('Ymd');
+        $today = now()->toDateString();
 
-        $tellerSetting = $settings->get('teller');
-        $csSetting = $settings->get('cs');
+        $tellerSettingIds = ServiceSetting::query()->where('service', 'teller')->pluck('id');
+        $csSettingIds = ServiceSetting::query()->where('service', 'cs')->pluck('id');
 
         // Teller Next Number & Wait Info
-        $lastTeller = $tellerSetting ? Queue::where('service_setting_id', $tellerSetting->id)
-            ->where(fn($q) => $q->where('number', 'like', "T-{$today}-%")->orWhere('number', 'like', "T-%"))
-            ->latest('id')->first() : null;
+        $lastTeller = Queue::whereIn('service_setting_id', $tellerSettingIds)
+            ->whereDate('created_at', $today)
+            ->latest('id')->first();
 
         $nextTellerSeq = 1;
         if ($lastTeller) {
@@ -62,15 +62,15 @@ class QueueController extends Controller
         }
         $nextTellerNumber = sprintf('T-%03d', $nextTellerSeq);
 
-        $tellerWaiting = $tellerSetting ? Queue::where('service_setting_id', $tellerSetting->id)->where('status', QueueStatus::WAITING)->count() : 0;
+        $tellerWaiting = Queue::whereIn('service_setting_id', $tellerSettingIds)->whereDate('created_at', $today)->where('status', QueueStatus::WAITING)->count();
         $tellerEstWait = $tellerWaiting > 0 
             ? "~" . ($tellerWaiting * 3) . "–" . ($tellerWaiting * 4) . " Menit ({$tellerWaiting} Menunggu)"
             : "~1–3 Menit (Langsung)";
 
         // CS Next Number & Wait Info
-        $lastCs = $csSetting ? Queue::where('service_setting_id', $csSetting->id)
-            ->where(fn($q) => $q->where('number', 'like', "CS-{$today}-%")->orWhere('number', 'like', "CS-%"))
-            ->latest('id')->first() : null;
+        $lastCs = Queue::whereIn('service_setting_id', $csSettingIds)
+            ->whereDate('created_at', $today)
+            ->latest('id')->first();
 
         $nextCsSeq = 1;
         if ($lastCs) {
@@ -79,10 +79,16 @@ class QueueController extends Controller
         }
         $nextCsNumber = sprintf('CS-%03d', $nextCsSeq);
 
-        $csWaiting = $csSetting ? Queue::where('service_setting_id', $csSetting->id)->where('status', QueueStatus::WAITING)->count() : 0;
+        $csWaiting = Queue::whereIn('service_setting_id', $csSettingIds)->whereDate('created_at', $today)->where('status', QueueStatus::WAITING)->count();
         $csEstWait = $csWaiting > 0 
             ? "~" . ($csWaiting * 8) . "–" . ($csWaiting * 10) . " Menit ({$csWaiting} Menunggu)"
             : "~1–5 Menit (Langsung)";
+
+        $csActive = ServiceSetting::where('service', 'cs')->where('is_active', true)->exists();
+        $tellerActive = ServiceSetting::where('service', 'teller')->where('is_active', true)->exists();
+
+        $csCounterName = ServiceSetting::where('service', 'cs')->where('is_active', true)->orderBy('id')->value('counter_name') ?? 'Loket CS - Kredit & Pensiun';
+        $tellerCounterName = ServiceSetting::where('service', 'teller')->where('is_active', true)->orderBy('id')->value('counter_name') ?? 'Loket Teller - Kas & Pensiun';
 
         return view('queue.take-number', compact(
             'settings',
@@ -91,7 +97,11 @@ class QueueController extends Controller
             'tellerEstWait',
             'nextCsNumber',
             'csWaiting',
-            'csEstWait'
+            'csEstWait',
+            'csCounterName',
+            'tellerCounterName',
+            'csActive',
+            'tellerActive'
         ));
     }
 
@@ -100,7 +110,13 @@ class QueueController extends Controller
         $data = $request->validate(['service' => ['required', 'string']]);
         $serviceKey = $data['service'];
 
-        $setting = ServiceSetting::query()->where('service', $serviceKey)->first();
+        $serviceSettingIds = ServiceSetting::query()->where('service', $serviceKey)->pluck('id');
+        $setting = ServiceSetting::query()->where('service', $serviceKey)->where('is_active', true)->first();
+
+        if (! $setting) {
+            $setting = ServiceSetting::query()->where('service', $serviceKey)->first();
+        }
+
         if (! $setting) {
             return back()->with('error', 'Layanan tidak ditemukan.');
         }
@@ -121,14 +137,11 @@ class QueueController extends Controller
 
         while ($attempts < $maxAttempts) {
             try {
-                $queue = DB::transaction(function () use ($setting, $prefix) {
-                    $today = now()->format('Ymd');
+                $queue = DB::transaction(function () use ($setting, $serviceSettingIds, $prefix) {
+                    $todayDate = now()->toDateString();
                     $lastQueue = Queue::query()
-                        ->where('service_setting_id', $setting->id)
-                        ->where(function ($q) use ($prefix, $today) {
-                            $q->where('number', 'like', "{$prefix}-{$today}-%")
-                              ->orWhere('number', 'like', "{$prefix}-%");
-                        })
+                        ->whereIn('service_setting_id', $serviceSettingIds)
+                        ->whereDate('created_at', $todayDate)
                         ->lockForUpdate()
                         ->latest('id')
                         ->first();
@@ -156,6 +169,17 @@ class QueueController extends Controller
             }
         }
 
+        if ($queue) {
+            $waitingCount = Queue::query()
+                ->where('service_setting_id', $setting->id)
+                ->where('status', QueueStatus::WAITING)
+                ->count();
+
+            if ($waitingCount >= 10) {
+                \App\Services\NotificationService::sendHighQueueVolumeNotification($setting->label, $waitingCount);
+            }
+        }
+
         return back()->with('ticket', $queue->number);
     }
 
@@ -177,6 +201,10 @@ class QueueController extends Controller
 
         \Illuminate\Support\Facades\Log::warning("Banking Security Alert: Admin User #" . auth()->id() . " reset all queues.");
 
+        if (auth()->check()) {
+            \App\Services\NotificationService::sendQueueResetNotification(auth()->user());
+        }
+
         return back()->with('status', 'Semua data antrean berhasil di-reset.');
     }
 
@@ -192,9 +220,9 @@ class QueueController extends Controller
             'title' => $counterName,
             'service' => $serviceKey,
             'currentQueue' => $this->activeQueue($settingId),
-            'waitingCount' => $settingId ? Queue::query()->where('service_setting_id', $settingId)->where('status', QueueStatus::WAITING)->count() : 0,
-            'waitingQueues' => $settingId ? Queue::query()->where('service_setting_id', $settingId)->where('status', QueueStatus::WAITING)->oldest('id')->limit(10)->get() : collect(),
-            'recentQueues' => $settingId ? Queue::query()->where('service_setting_id', $settingId)->whereIn('status', [QueueStatus::COMPLETED, QueueStatus::SKIPPED])->latest('updated_at')->limit(8)->get() : collect(),
+            'waitingCount' => $settingId ? Queue::query()->where('service_setting_id', $settingId)->whereDate('created_at', now()->toDateString())->where('status', QueueStatus::WAITING)->count() : 0,
+            'waitingQueues' => $settingId ? Queue::query()->where('service_setting_id', $settingId)->whereDate('created_at', now()->toDateString())->where('status', QueueStatus::WAITING)->oldest('id')->limit(10)->get() : collect(),
+            'recentQueues' => $settingId ? Queue::query()->where('service_setting_id', $settingId)->whereDate('created_at', now()->toDateString())->whereIn('status', [QueueStatus::COMPLETED, QueueStatus::SKIPPED])->latest('updated_at')->limit(8)->get() : collect(),
         ]);
     }
 
@@ -212,6 +240,7 @@ class QueueController extends Controller
 
             $next = Queue::query()
                 ->where('service_setting_id', $setting->id)
+                ->whereDate('created_at', now()->toDateString())
                 ->where('status', QueueStatus::WAITING)
                 ->orderBy('id')
                 ->lockForUpdate()

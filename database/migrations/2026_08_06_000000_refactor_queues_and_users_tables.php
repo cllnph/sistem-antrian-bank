@@ -15,8 +15,9 @@ return new class extends Migration
         });
 
         Schema::table('queues', function (Blueprint $table) {
-            // Drop old composite index if exists
-            $table->dropIndex('queues_service_status_created_idx');
+            // Drop old composite indexes if exists
+            try { $table->dropIndex(['service', 'status']); } catch (\Throwable $e) {}
+            try { $table->dropIndex('queues_service_status_created_idx'); } catch (\Throwable $e) {}
 
             if (Schema::hasColumn('queues', 'service')) {
                 $table->dropColumn('service');

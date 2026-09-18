@@ -19,7 +19,7 @@ class AdminAuthController extends Controller
     public function showLoginForm(): View|RedirectResponse
     {
         if (Auth::check()) {
-            return redirect()->intended('/admin');
+            return redirect()->intended('/admin/queues');
         }
 
         return view('admin.auth.login');
@@ -28,6 +28,8 @@ class AdminAuthController extends Controller
     /**
      * Handle an incoming admin authentication request with Rate Limiting & Audit Trail.
      */
+    public function store(Request $request): RedirectResponse
+    {
         $email = $request->input('email') 
             ?? $request->input('data.email') 
             ?? data_get($request->all(), 'data.email')
@@ -46,6 +48,8 @@ class AdminAuthController extends Controller
 
             Log::warning("Banking Security Alert: Brute force attempt blocked for email '{$email}' from IP {$request->ip()}. Locked for {$seconds}s.");
 
+            \App\Services\NotificationService::sendSecurityAlertNotification((string) $email, $request->ip(), $seconds);
+
             return back()
                 ->withInput($request->only('email', 'remember'))
                 ->withErrors([
@@ -53,9 +57,21 @@ class AdminAuthController extends Controller
                 ]);
         }
 
+        $existingUser = \App\Models\User::where('email', $email)->first();
+        if ($existingUser && ! $existingUser->is_active) {
+            Log::warning("Banking Security Alert: Inactive user attempt login for User #{$existingUser->id} ({$existingUser->email}).");
+
+            return back()
+                ->withInput($request->only('email', 'remember'))
+                ->withErrors([
+                    'login_error' => 'Akun Anda telah dinonaktifkan. Silakan hubungi Administrator.',
+                ]);
+        }
+
         $credentials = [
             'email' => $email,
             'password' => $password,
+            'is_active' => 1,
         ];
 
         $remember = $request->boolean('remember');
@@ -87,15 +103,19 @@ class AdminAuthController extends Controller
             $user->update(['last_login_at' => now()]);
             Log::info("Banking Audit Trail: Successful admin authentication for User #{$user->id} ({$user->email}) from IP {$request->ip()}.");
 
-            if ($user->hasRole('teller') || $user->role === 'teller') {
+            if ($user->hasRole('teller')) {
                 return redirect()->route('teller.dashboard');
             }
 
-            if ($user->hasRole('cs') || $user->role === 'cs') {
+            if ($user->hasRole('cs')) {
                 return redirect()->route('cs.dashboard');
             }
 
-            return redirect()->intended('/admin');
+            if ($user->hasRole('admin')) {
+                return redirect()->intended('/admin');
+            }
+
+            return redirect()->intended('/admin/queues');
         }
 
         // Authentication failed -> Increment rate limiter

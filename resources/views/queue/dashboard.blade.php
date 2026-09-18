@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Operator Console {{ $title }} - PT BPR DP TASPEN</title>
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Outfit:wght@500;700;800;900&display=swap" rel="stylesheet">
@@ -334,13 +335,13 @@
                 <div class="avatar">{{ strtoupper(substr(auth()->user()->name, 0, 2)) }}</div>
                 <div class="user-details">
                     <div class="user-name">{{ auth()->user()->name }}</div>
-                    <div class="user-role">Petugas {{ auth()->user()->role }}</div>
+                    <div class="user-role">Petugas {{ auth()->user()->roles->first()?->name ?? '' }}</div>
                 </div>
             </div>
 
             <div class="nav-actions">
                 <a href="/display" target="_blank" class="nav-btn">Layar Display ↗</a>
-                @if(auth()->user()->role === 'admin')
+                @if(auth()->user()->hasRole('admin'))
                     <a href="/admin" class="nav-btn">Admin Panel</a>
                 @endif
                 <form method="POST" action="{{ route('logout') }}" style="display:inline">

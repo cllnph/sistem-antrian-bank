@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Layar Informasi Pemanggilan Antrean - PT BPR DP TASPEN</title>
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&family=Outfit:wght@500;700;800;900&display=swap" rel="stylesheet">
@@ -249,44 +250,8 @@
         </div>
     </header>
 
-    <main class="display-grid">
-        <!-- CS Card -->
-        <section id="card-cs" class="display-card">
-            <div class="card-header-badge badge-cs">
-                <span>●</span> CS Kredit & Pensiun TASPEN
-            </div>
-            <div id="counter-cs" class="counter-title">Loket CS</div>
-            <div id="servedby-cs" class="teller-name">Petugas Customer Service</div>
-
-            <div class="number-box">
-                <div class="number-label">Nomor Antrean Dipanggil</div>
-                <div id="cs" class="number-value">-</div>
-            </div>
-
-            <div class="card-footer-stats">
-                <span>Antrean Menunggu:</span>
-                <span id="wait-cs" class="wait-highlight">0 Orang</span>
-            </div>
-        </section>
-
-        <!-- Teller Card -->
-        <section id="card-teller" class="display-card">
-            <div class="card-header-badge badge-teller">
-                <span>●</span> Teller Kas & Pensiun TASPEN
-            </div>
-            <div id="counter-teller" class="counter-title">Loket Teller</div>
-            <div id="servedby-teller" class="teller-name">Petugas Teller</div>
-
-            <div class="number-box">
-                <div class="number-label">Nomor Antrean Dipanggil</div>
-                <div id="teller" class="number-value">-</div>
-            </div>
-
-            <div class="card-footer-stats">
-                <span>Antrean Menunggu:</span>
-                <span id="wait-teller" class="wait-highlight">0 Orang</span>
-            </div>
-        </section>
+    <main id="displayGrid" class="display-grid">
+        <!-- Dynamic active counters rendered via JS -->
     </main>
 
     <footer class="tv-footer">
@@ -300,7 +265,7 @@
 
     <script>
         let audioEnabled = true;
-        let lastCalledTime = { cs: null, teller: null };
+        let lastCalledTimes = {};
 
         function updateClock() {
             const now = new Date();
@@ -367,37 +332,52 @@
                 const response = await fetch('/api/display/data');
                 const data = await response.json();
 
-                for (const service of ['cs', 'teller']) {
-                    const queueData = data[service];
-                    const numElement = document.getElementById(service);
-                    const waitElement = document.getElementById('wait-' + service);
-                    const counterElement = document.getElementById('counter-' + service);
-                    const servedByElement = document.getElementById('servedby-' + service);
-                    const cardElement = document.getElementById('card-' + service);
+                const grid = document.getElementById('displayGrid');
+                if (!grid) return;
 
-                    waitElement.textContent = (data.waiting[service] ?? 0) + ' Orang';
-
-                    if (data.settings && data.settings[service]) {
-                        counterElement.textContent = data.settings[service].counter_name || (service === 'cs' ? 'Loket CS - Kredit & Pensiun' : 'Loket Teller - Kas & Pensiun');
-                    }
-
-                    if (queueData && queueData.number) {
-                        const isNewCall = lastCalledTime[service] !== queueData.called_at;
-                        numElement.textContent = queueData.number;
-                        if (servedByElement && queueData.served_by_name) {
-                            servedByElement.textContent = 'Petugas: ' + queueData.served_by_name;
-                        }
-
-                        if (isNewCall && lastCalledTime[service] !== null) {
-                            cardElement.classList.add('call-flash');
-                            setTimeout(() => cardElement.classList.remove('call-flash'), 2000);
-                            announceQueue(queueData.number, queueData.counter_name || (service === 'cs' ? 'Customer Service' : 'Teller'));
-                        }
-                        lastCalledTime[service] = queueData.called_at;
-                    } else {
-                        numElement.textContent = '-';
-                    }
+                const counters = data.counters || [];
+                if (counters.length === 0) {
+                    grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; font-size: 20px; color: #94a3b8; padding: 40px;">⚠️ Belum ada loket layanan yang diaktifkan di Admin Panel.</div>';
+                    return;
                 }
+
+                grid.style.gridTemplateColumns = counters.length === 1 ? '1fr' : (counters.length === 2 ? 'repeat(2, 1fr)' : (counters.length === 3 ? 'repeat(3, 1fr)' : 'repeat(auto-fit, minmax(320px, 1fr))'));
+
+                grid.innerHTML = counters.map(c => {
+                    const badgeClass = c.service === 'teller' ? 'badge-teller' : 'badge-cs';
+                    const badgeTitle = c.label || (c.service === 'teller' ? 'Teller Kas & Pensiun TASPEN' : 'CS Kredit & Pensiun TASPEN');
+                    const numColor = c.service === 'teller' ? 'color: #4ade80;' : 'color: #38bdf8;';
+                    
+                    const lastTime = lastCalledTimes[c.id];
+                    const isNewCall = c.called_at && lastTime !== c.called_at;
+
+                    if (isNewCall && lastTime !== undefined) {
+                        announceQueue(c.current_number, c.counter_name);
+                    }
+                    if (c.called_at) {
+                        lastCalledTimes[c.id] = c.called_at;
+                    }
+
+                    return `
+                        <section id="card-${c.id}" class="display-card ${isNewCall ? 'call-flash' : ''}">
+                            <div class="card-header-badge ${badgeClass}">
+                                <span>●</span> ${badgeTitle}
+                            </div>
+                            <div class="counter-title">${c.counter_name}</div>
+                            <div class="teller-name">${c.served_by_name !== 'Belum Dipanggil' ? 'Petugas: ' + c.served_by_name : 'Petugas Operasional'}</div>
+
+                            <div class="number-box">
+                                <div class="number-label">Nomor Antrean Dipanggil</div>
+                                <div class="number-value" style="${numColor}">${c.current_number}</div>
+                            </div>
+
+                            <div class="card-footer-stats">
+                                <span>Antrean Menunggu:</span>
+                                <span class="wait-highlight">${c.waiting_count} Orang</span>
+                            </div>
+                        </section>
+                    `;
+                }).join('');
             } catch(e) {
                 console.error('Fetch error:', e);
             } finally {
