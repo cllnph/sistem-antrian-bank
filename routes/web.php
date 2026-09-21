@@ -52,7 +52,7 @@ Route::middleware(['auth'])->group(function () {
 
 // Public Kiosk & Display Screens
 Route::get('/display', [DisplayController::class, 'index'])->name('display');
-Route::get('/api/display/data', [DisplayController::class, 'getDisplayData']);
+Route::get('/api/display/data', [DisplayController::class, 'getDisplayData'])->name('api.display.data');
 Route::get('/ambil-nomor', [QueueController::class, 'takeNumber'])->name('queue.take-number');
 Route::post('/ambil-nomor', [QueueController::class, 'storeNumber'])->name('queue.store-number');
 Route::get('/verifikasi/{number}', [QueueController::class, 'verifyTicket'])->name('queue.verify');

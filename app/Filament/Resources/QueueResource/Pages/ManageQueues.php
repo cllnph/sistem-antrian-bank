@@ -14,11 +14,20 @@ class ManageQueues extends ManageRecords
 
     protected function getHeaderActions(): array
     {
-        return [CreateAction::make()->label('Tambah Antrean')];
+        return [
+            CreateAction::make()
+                ->label('Tambah Antrean Manual')
+                ->visible(fn () => auth()->user()?->hasRole('admin') ?? false),
+        ];
     }
 
     public function getTabs(): array
     {
+        $user = auth()->user();
+        if ($user && ! $user->hasRole('admin')) {
+            return [];
+        }
+
         return [
             'all' => Tab::make('Semua Riwayat')
                 ->icon('heroicon-o-list-bullet'),

@@ -28,8 +28,12 @@ class AdminPanelProvider extends PanelProvider
             ->default()
             ->id('admin')
             ->path('admin')
-            ->brandLogo(fn () => view('components.bank-logo', ['size' => '72px']))
-            ->brandLogoHeight('5.5rem')
+            ->brandLogo(fn () => view('components.bank-logo', [
+                'height' => '40px',
+                'padding' => '4px 10px',
+                'showSlogan' => !request()->is('admin/login*') && !request()->is('login*') && !request()->routeIs('filament.admin.auth.login'),
+            ]))
+            ->brandLogoHeight('48px')
             ->login()
             ->darkMode(true)
             ->globalSearchKeybindings(['command+k', 'ctrl+k'])
@@ -116,12 +120,20 @@ class AdminPanelProvider extends PanelProvider
                         letter-spacing: -0.02em !important;
                     }
                     .fi-logo {
-                        background: #ffffff !important;
-                        border-radius: 12px !important;
-                        border: 1px solid #cbd5e1 !important;
-                        box-shadow: 0 2px 10px rgba(15, 43, 92, 0.08) !important;
+                        background: transparent !important;
+                        border: none !important;
+                        box-shadow: none !important;
                         display: inline-flex !important;
                         align-items: center !important;
+                        text-decoration: none !important;
+                        padding: 0 !important;
+                    }
+                    .fi-topbar .fi-logo {
+                        padding: 0 !important;
+                    }
+                    .fi-topbar .bank-dp-taspen-exact-logo {
+                        height: 40px !important;
+                        max-height: 40px !important;
                     }
                     .fi-simple-layout .fi-logo {
                         padding: 16px 36px !important;
@@ -132,6 +144,10 @@ class AdminPanelProvider extends PanelProvider
                         height: 76px !important;
                         max-height: 96px !important;
                     }
+                    /* Sembunyikan slogan badge pada halaman login (simple layout) */
+                    .fi-simple-layout .brand-slogan-badge {
+                        display: none !important;
+                    }
                     .fi-sidebar {
                         position: relative !important;
                     }
@@ -139,16 +155,15 @@ class AdminPanelProvider extends PanelProvider
                         display: flex !important;
                         align-items: center !important;
                         justify-content: center !important;
-                        padding: 14px 16px !important;
+                        padding: 10px 14px !important;
                         border-bottom: 2px solid #eab308 !important; /* Gold accent line */
                         position: relative !important;
                     }
                     .fi-sidebar-header .fi-logo {
-                        background: #ffffff !important;
-                        padding: 8px 18px !important;
-                        border-radius: 14px !important;
-                        border: 1px solid #cbd5e1 !important;
-                        box-shadow: 0 3px 12px rgba(15, 43, 92, 0.08) !important;
+                        background: transparent !important;
+                        padding: 0 !important;
+                        border: none !important;
+                        box-shadow: none !important;
                         display: flex !important;
                         align-items: center !important;
                         justify-content: center !important;
@@ -158,13 +173,20 @@ class AdminPanelProvider extends PanelProvider
                     }
                     .fi-sidebar-header .bank-dp-taspen-exact-logo,
                     .fi-sidebar-header .fi-logo img {
-                        height: 48px !important;
-                        max-height: 54px !important;
+                        height: 40px !important;
+                        max-height: 44px !important;
                         width: auto !important;
                         max-width: 100% !important;
                         object-fit: contain !important;
                         display: block !important;
                         margin: 0 auto !important;
+                    }
+                    /* When sidebar is collapsed, hide slogan badge so logo fits compactly */
+                    .fi-sidebar-collapsed .brand-slogan-badge {
+                        display: none !important;
+                    }
+                    .fi-sidebar-collapsed .bank-dp-taspen-exact-logo {
+                        height: 28px !important;
                     }
                     /* Hide any leftover chevron / button / links inside header so only logo remains */
                     .fi-sidebar-header button,
@@ -400,26 +422,6 @@ class AdminPanelProvider extends PanelProvider
                         display: <?php echo (auth()->check() && auth()->user()?->hasRole('admin')) ? 'inline-flex' : 'none !important'; ?>;
                     }
                 </style>
-HTML
-            )
-        );
-
-        \Filament\Support\Facades\FilamentView::registerRenderHook(
-            'panels::user-menu.before',
-            fn (): string => \Illuminate\Support\Facades\Blade::render(<<<'HTML'
-                @auth
-                    @php
-                        $user = auth()->user();
-                        $counter = $user->serviceSetting;
-                        $counterName = $counter ? $counter->counter_name : ($user->hasRole('admin') ? 'Administrator (Semua Loket)' : 'Belum Ditugaskan');
-                    @endphp
-                    <div style="display: flex; align-items: center; gap: 8px; margin-right: 12px;">
-                        <div style="background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
-                            <span style="display: inline-block; width: 8px; height: 8px; background: #22c55e; border-radius: 50%;"></span>
-                            <span>📍 Loket Anda: {{ $counterName }}</span>
-                        </div>
-                    </div>
-                @endauth
 HTML
             )
         );

@@ -12,10 +12,17 @@ class DisplayController extends Controller
 {
     public function index(): View
     {
-        return view('display');
+        return view('display', [
+            'initialData' => $this->buildDisplayData(),
+        ]);
     }
 
     public function getDisplayData(): JsonResponse
+    {
+        return response()->json($this->buildDisplayData());
+    }
+
+    public function buildDisplayData(): array
     {
         $activeSettings = ServiceSetting::query()->where('is_active', true)->get();
         $allSettings = ServiceSetting::query()->get();
@@ -48,13 +55,38 @@ class DisplayController extends Controller
             ->where('status', QueueStatus::WAITING)
             ->count();
 
-        // Single query for all CALLED queues grouped by service_setting_id
+        // Earliest waiting ticket to be called next
+        $nextCsWaiting = empty($csIds) ? null : Queue::query()
+            ->withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+            ->whereIn('service_setting_id', $csIds)
+            ->whereDate('created_at', $today)
+            ->where('status', QueueStatus::WAITING)
+            ->orderBy('id', 'asc')
+            ->value('number');
+
+        $nextTellerWaiting = empty($tellerIds) ? null : Queue::query()
+            ->withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+            ->whereIn('service_setting_id', $tellerIds)
+            ->whereDate('created_at', $today)
+            ->where('status', QueueStatus::WAITING)
+            ->orderBy('id', 'asc')
+            ->value('number');
+
+        $nextUmumWaiting = empty($umumIds) ? null : Queue::query()
+            ->withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+            ->whereIn('service_setting_id', $umumIds)
+            ->whereDate('created_at', $today)
+            ->where('status', QueueStatus::WAITING)
+            ->orderBy('id', 'asc')
+            ->value('number');
+
+        // Single query for all CALLED/SERVING queues grouped by service_setting_id
         $calledQueues = empty($settingIds) ? collect() : Queue::query()
             ->withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
             ->with(['servedBy.serviceSetting'])
             ->whereIn('service_setting_id', $settingIds)
             ->whereDate('created_at', $today)
-            ->where('status', QueueStatus::CALLED)
+            ->whereIn('status', [QueueStatus::CALLED, QueueStatus::SERVING])
             ->orderBy('called_at', 'desc')
             ->get()
             ->groupBy('service_setting_id');
@@ -71,6 +103,13 @@ class DisplayController extends Controller
                 default => 0,
             };
 
+            $nextWaiting = match ($setting->service) {
+                'cs' => $nextCsWaiting ?? 'belum ada antrean',
+                'teller' => $nextTellerWaiting ?? 'belum ada antrean',
+                'umum' => $nextUmumWaiting ?? 'belum ada antrean',
+                default => 'belum ada antrean',
+            };
+
             $labelName = match ($setting->service) {
                 'cs' => 'CUSTOMER SERVICE & KREDIT PENSIUN',
                 'teller' => 'TELLER TABUNGAN & PENSIUN TASPEN',
@@ -84,9 +123,10 @@ class DisplayController extends Controller
                 'label' => $labelName,
                 'counter_name' => $setting->counter_name,
                 'is_active' => (bool) $setting->is_active,
-                'current_number' => $latest?->number ?? '-',
+                'current_number' => $latest?->number ?? 'belum ada antrean',
                 'served_by_name' => $latest?->servedBy?->name ?? 'Belum Dipanggil',
                 'waiting_count' => $waitCount,
+                'next_waiting_number' => $nextWaiting,
                 'called_at' => $latest?->called_at?->toIso8601String(),
             ];
         }
@@ -95,12 +135,46 @@ class DisplayController extends Controller
         $tellerSetting = $activeSettings->firstWhere('service', 'teller');
         $umumSetting = $activeSettings->firstWhere('service', 'umum');
 
-        return response()->json([
+        $maxTellerSeq = Queue::query()
+            ->withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+            ->whereIn('service_setting_id', $tellerIds)
+            ->whereDate('created_at', $today)
+            ->where('number', 'like', 'T-%')
+            ->get()
+            ->map(function ($q) {
+                $parts = explode('-', $q->number);
+                return (int) end($parts);
+            })
+            ->max() ?? 0;
+        $nextTellerNumber = sprintf('T-%03d', $maxTellerSeq + 1);
+
+        $maxCsSeq = Queue::query()
+            ->withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+            ->whereIn('service_setting_id', $csIds)
+            ->whereDate('created_at', $today)
+            ->where('number', 'like', 'CS-%')
+            ->get()
+            ->map(function ($q) {
+                $parts = explode('-', $q->number);
+                return (int) end($parts);
+            })
+            ->max() ?? 0;
+        $nextCsNumber = sprintf('CS-%03d', $maxCsSeq + 1);
+
+        $allCsCalled = $calledQueues->filter(fn ($val, $key) => in_array($key, $csIds))->flatten(1)->sortByDesc('called_at');
+        $allTellerCalled = $calledQueues->filter(fn ($val, $key) => in_array($key, $tellerIds))->flatten(1)->sortByDesc('called_at');
+        $allUmumCalled = $calledQueues->filter(fn ($val, $key) => in_array($key, $umumIds))->flatten(1)->sortByDesc('called_at');
+
+        return [
             'counters' => $countersData,
             'total_active' => count($countersData),
-            'cs' => $this->formatQueueData($calledQueues->get($csSetting?->id), $csSetting?->counter_name ?? 'Loket CS'),
-            'teller' => $this->formatQueueData($calledQueues->get($tellerSetting?->id), $tellerSetting?->counter_name ?? 'Loket Teller'),
-            'umum' => $this->formatQueueData($calledQueues->get($umumSetting?->id), $umumSetting?->counter_name ?? 'Loket Umum'),
+            'cs' => $this->formatQueueData($allCsCalled, $csSetting?->counter_name ?? 'Loket CS'),
+            'teller' => $this->formatQueueData($allTellerCalled, $tellerSetting?->counter_name ?? 'Loket Teller'),
+            'umum' => $this->formatQueueData($allUmumCalled, $umumSetting?->counter_name ?? 'Loket Umum'),
+            'teller_wait_count' => $tellerWaitCount,
+            'cs_wait_count' => $csWaitCount,
+            'next_teller_number' => $nextTellerNumber,
+            'next_cs_number' => $nextCsNumber,
             'waiting' => [
                 'cs' => $csWaitCount,
                 'teller' => $tellerWaitCount,
@@ -123,7 +197,7 @@ class DisplayController extends Controller
                     'is_active' => $umumSetting?->is_active ?? true,
                 ],
             ],
-        ]);
+        ];
     }
 
     private function formatQueueData(?\Illuminate\Support\Collection $queues, string $defaultCounterName): ?array

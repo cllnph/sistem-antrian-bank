@@ -73,7 +73,7 @@ class QueueResource extends Resource
                 $baseQuery->whereIn('service_setting_id', $matchingSettingIds);
             }
 
-            // 1. Priority 1: Ticket currently CALLED/SERVING by THIS OFFICER or at THIS COUNTER
+            // 1. Prioritas 1: Antrean yang SEDANG DIPANGGIL / DILAYANI oleh petugas ini atau di loket ini
             $activeQueueId = (clone $baseQuery)
                 ->where(function ($q) use ($user) {
                     if ($user->service_setting_id) {
@@ -91,7 +91,7 @@ class QueueResource extends Resource
                 return $query->where('id', $activeQueueId);
             }
 
-            // 2. Priority 2: Single next WAITING ticket (oldest / FIFO) in this service category
+            // 2. Prioritas 2: Tepat 1 antrean MENUNGGU berikutnya (paling awal / FIFO) pada layanan loket ini
             $nextWaitingId = (clone $baseQuery)
                 ->where('status', QueueStatus::WAITING)
                 ->whereDate('created_at', now()->toDateString())
@@ -102,7 +102,7 @@ class QueueResource extends Resource
                 return $query->where('id', $nextWaitingId);
             }
 
-            // 3. No active or waiting ticket -> empty result set (0 rows)
+            // 3. Jika tidak ada antrean aktif dan tidak ada yang menunggu -> tampilkan 0 baris (kosong)
             return $query->whereRaw('1 = 0');
         }
 
@@ -150,11 +150,11 @@ class QueueResource extends Resource
             ->columns([
                 TextColumn::make('number')
                     ->label(fn () => __('app.queue_number'))
-                    ->searchable($isAdmin)
-                    ->sortable($isAdmin)
+                    ->searchable()
+                    ->sortable()
                     ->weight('bold')
                     ->color('primary'),
-                TextColumn::make('serviceSetting.counter_name')->label(fn () => __('app.service'))->sortable($isAdmin)->placeholder('-'),
+                TextColumn::make('serviceSetting.counter_name')->label(fn () => __('app.service'))->sortable()->placeholder('-'),
                 TextColumn::make('status')
                     ->label(fn () => __('app.status'))
                     ->badge()
@@ -162,7 +162,7 @@ class QueueResource extends Resource
                     ->formatStateUsing(fn (QueueStatus $state) => $state->getLabel()),
                 TextColumn::make('called_at')->label(fn () => __('app.call_time'))->dateTime('d M Y H:i')->placeholder('-'),
                 TextColumn::make('servedBy.name')->label(fn () => __('app.active_staff'))->placeholder('-'),
-            ])->filters($isAdmin ? [
+            ])->filters([
                 Filter::make('today')
                     ->label('📅 Antrean Hari Ini (Default)')
                     ->default()
@@ -174,7 +174,7 @@ class QueueResource extends Resource
                     QueueStatus::COMPLETED->value => QueueStatus::COMPLETED->getLabel(),
                     QueueStatus::SKIPPED->value => QueueStatus::SKIPPED->getLabel(),
                 ]),
-            ] : [])->recordActions([
+            ])->recordActions([
                 Action::make('call')
                     ->label(fn () => __('app.call_next'))
                     ->color('info')
@@ -225,6 +225,30 @@ class QueueResource extends Resource
                                 'service_setting_id' => $targetSettingId,
                             ]);
                         });
+                    }),
+                Action::make('recall')
+                    ->label('Panggil Ulang')
+                    ->color('warning')
+                    ->icon('heroicon-m-speaker-wave')
+                    ->visible(fn (Queue $record) => in_array($record->status, [QueueStatus::CALLED, QueueStatus::SERVING], true))
+                    ->action(function (Queue $record): void {
+                        DB::transaction(function () use ($record): void {
+                            $lockedRecord = Queue::query()->where('id', $record->id)->lockForUpdate()->first();
+                            if ($lockedRecord && in_array($lockedRecord->status, [QueueStatus::CALLED, QueueStatus::SERVING], true)) {
+                                $targetSettingId = auth()->user()?->service_setting_id ?? $lockedRecord->service_setting_id;
+                                $lockedRecord->update([
+                                    'called_at' => now(),
+                                    'served_by' => auth()->id(),
+                                    'service_setting_id' => $targetSettingId,
+                                ]);
+                            }
+                        });
+
+                        Notification::make()
+                            ->title("Antrean {$record->number} dipanggil ulang")
+                            ->body('Panggilan ulang berhasil dikirim ke layar display.')
+                            ->warning()
+                            ->send();
                     }),
                 Action::make('complete')
                     ->label(fn () => __('app.complete'))

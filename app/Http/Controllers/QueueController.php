@@ -42,8 +42,12 @@ class QueueController extends Controller
         return $this->callNext('umum');
     }
 
-    public function takeNumber(): View
+    public function takeNumber(Request $request): View
     {
+        if ($request->has('preview_ticket')) {
+            session()->flash('ticket', $request->query('preview_ticket'));
+        }
+
         $settings = ServiceSetting::query()->get()->keyBy('service');
         $today = now()->toDateString();
 
@@ -51,35 +55,45 @@ class QueueController extends Controller
         $csSettingIds = ServiceSetting::query()->where('service', 'cs')->pluck('id');
 
         // Teller Next Number & Wait Info
-        $lastTeller = Queue::whereIn('service_setting_id', $tellerSettingIds)
+        $maxTellerSeq = Queue::withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+            ->whereIn('service_setting_id', $tellerSettingIds)
             ->whereDate('created_at', $today)
-            ->latest('id')->first();
+            ->where('number', 'like', 'T-%')
+            ->get()
+            ->map(function ($q) {
+                $parts = explode('-', $q->number);
+                return (int) end($parts);
+            })
+            ->max() ?? 0;
+        $nextTellerNumber = sprintf('T-%03d', $maxTellerSeq + 1);
 
-        $nextTellerSeq = 1;
-        if ($lastTeller) {
-            $parts = explode('-', $lastTeller->number);
-            $nextTellerSeq = ((int) end($parts)) + 1;
-        }
-        $nextTellerNumber = sprintf('T-%03d', $nextTellerSeq);
-
-        $tellerWaiting = Queue::whereIn('service_setting_id', $tellerSettingIds)->whereDate('created_at', $today)->where('status', QueueStatus::WAITING)->count();
+        $tellerWaiting = Queue::withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+            ->whereIn('service_setting_id', $tellerSettingIds)
+            ->whereDate('created_at', $today)
+            ->where('status', QueueStatus::WAITING)
+            ->count();
         $tellerEstWait = $tellerWaiting > 0 
             ? "~" . ($tellerWaiting * 3) . "–" . ($tellerWaiting * 4) . " Menit ({$tellerWaiting} Menunggu)"
             : "~1–3 Menit (Langsung)";
 
         // CS Next Number & Wait Info
-        $lastCs = Queue::whereIn('service_setting_id', $csSettingIds)
+        $maxCsSeq = Queue::withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+            ->whereIn('service_setting_id', $csSettingIds)
             ->whereDate('created_at', $today)
-            ->latest('id')->first();
+            ->where('number', 'like', 'CS-%')
+            ->get()
+            ->map(function ($q) {
+                $parts = explode('-', $q->number);
+                return (int) end($parts);
+            })
+            ->max() ?? 0;
+        $nextCsNumber = sprintf('CS-%03d', $maxCsSeq + 1);
 
-        $nextCsSeq = 1;
-        if ($lastCs) {
-            $parts = explode('-', $lastCs->number);
-            $nextCsSeq = ((int) end($parts)) + 1;
-        }
-        $nextCsNumber = sprintf('CS-%03d', $nextCsSeq);
-
-        $csWaiting = Queue::whereIn('service_setting_id', $csSettingIds)->whereDate('created_at', $today)->where('status', QueueStatus::WAITING)->count();
+        $csWaiting = Queue::withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+            ->whereIn('service_setting_id', $csSettingIds)
+            ->whereDate('created_at', $today)
+            ->where('status', QueueStatus::WAITING)
+            ->count();
         $csEstWait = $csWaiting > 0 
             ? "~" . ($csWaiting * 8) . "–" . ($csWaiting * 10) . " Menit ({$csWaiting} Menunggu)"
             : "~1–5 Menit (Langsung)";
@@ -90,14 +104,31 @@ class QueueController extends Controller
         $csCounterName = ServiceSetting::where('service', 'cs')->where('is_active', true)->orderBy('id')->value('counter_name') ?? 'Loket CS - Kredit & Pensiun';
         $tellerCounterName = ServiceSetting::where('service', 'teller')->where('is_active', true)->orderBy('id')->value('counter_name') ?? 'Loket Teller - Kas & Pensiun';
 
+        // Currently Serving Number (Sedang Dilayani)
+        $currentServingTeller = Queue::withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+            ->whereIn('service_setting_id', $tellerSettingIds)
+            ->whereDate('created_at', $today)
+            ->whereIn('status', [QueueStatus::CALLED, QueueStatus::SERVING])
+            ->latest('called_at')
+            ->value('number');
+
+        $currentServingCs = Queue::withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+            ->whereIn('service_setting_id', $csSettingIds)
+            ->whereDate('created_at', $today)
+            ->whereIn('status', [QueueStatus::CALLED, QueueStatus::SERVING])
+            ->latest('called_at')
+            ->value('number');
+
         return view('queue.take-number', compact(
             'settings',
             'nextTellerNumber',
             'tellerWaiting',
             'tellerEstWait',
+            'currentServingTeller',
             'nextCsNumber',
             'csWaiting',
             'csEstWait',
+            'currentServingCs',
             'csCounterName',
             'tellerCounterName',
             'csActive',
@@ -105,7 +136,7 @@ class QueueController extends Controller
         ));
     }
 
-    public function storeNumber(Request $request): RedirectResponse
+    public function storeNumber(Request $request): RedirectResponse|\Illuminate\Http\JsonResponse
     {
         $data = $request->validate(['service' => ['required', 'string']]);
         $serviceKey = $data['service'];
@@ -118,10 +149,16 @@ class QueueController extends Controller
         }
 
         if (! $setting) {
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json(['success' => false, 'message' => 'Layanan tidak ditemukan.'], 404);
+            }
             return back()->with('error', 'Layanan tidak ditemukan.');
         }
 
         if (! $setting->is_active) {
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json(['success' => false, 'message' => 'Layanan ini sedang tidak aktif.'], 422);
+            }
             return back()->with('error', 'Layanan ini sedang tidak aktif.');
         }
 
@@ -139,19 +176,20 @@ class QueueController extends Controller
             try {
                 $queue = DB::transaction(function () use ($setting, $serviceSettingIds, $prefix) {
                     $todayDate = now()->toDateString();
-                    $lastQueue = Queue::query()
+                    $maxSeq = Queue::query()
+                        ->withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
                         ->whereIn('service_setting_id', $serviceSettingIds)
                         ->whereDate('created_at', $todayDate)
+                        ->where('number', 'like', "{$prefix}-%")
                         ->lockForUpdate()
-                        ->latest('id')
-                        ->first();
+                        ->get()
+                        ->map(function ($q) {
+                            $parts = explode('-', $q->number);
+                            return (int) end($parts);
+                        })
+                        ->max() ?? 0;
 
-                    $sequence = 1;
-                    if ($lastQueue) {
-                        $parts = explode('-', $lastQueue->number);
-                        $lastSeq = (int) end($parts);
-                        $sequence = $lastSeq + 1;
-                    }
+                    $sequence = $maxSeq + 1;
 
                     return Queue::create([
                         'number' => sprintf('%s-%03d', $prefix, $sequence),
@@ -178,6 +216,20 @@ class QueueController extends Controller
             if ($waitingCount >= 10) {
                 \App\Services\NotificationService::sendHighQueueVolumeNotification($setting->label, $waitingCount);
             }
+        }
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'ticket' => $queue->number,
+                'id' => $queue->id,
+                'service' => $serviceKey,
+                'service_name' => $serviceKey === 'teller' ? 'TELLER' : 'CUSTOMER SERVICE',
+                'counter_name' => $setting->counter_name,
+                'waiting' => $waitingCount ?? 0,
+                'created_at' => now()->format('Y-m-d H:i:s'),
+                'date_formatted' => now()->translatedFormat('l, d F Y') . ' · ' . now()->format('H:i') . ' WIB',
+            ]);
         }
 
         return back()->with('ticket', $queue->number);
@@ -208,38 +260,82 @@ class QueueController extends Controller
         return back()->with('status', 'Semua data antrean berhasil di-reset.');
     }
 
-    private function dashboard(string $serviceKey, string $title): View
+    private function resolveServiceSetting(string $serviceKey): ?ServiceSetting
     {
         $user = auth()->user();
-        $setting = ServiceSetting::query()->where('service', $serviceKey)->first();
+        if ($user && $user->service_setting_id) {
+            $userSetting = ServiceSetting::query()->find($user->service_setting_id);
+            if ($userSetting && $userSetting->service === $serviceKey) {
+                return $userSetting;
+            }
+        }
+
+        return ServiceSetting::query()->where('service', $serviceKey)->where('is_active', true)->first()
+            ?? ServiceSetting::query()->where('service', $serviceKey)->first();
+    }
+
+    private function dashboard(string $serviceKey, string $title): View
+    {
+        $setting = $this->resolveServiceSetting($serviceKey);
         $settingId = $setting?->id;
 
-        $counterName = $user?->serviceSetting?->counter_name ?? "Petugas {$title}";
+        $allServiceSettingIds = ServiceSetting::query()
+            ->where('service', $serviceKey)
+            ->pluck('id')
+            ->toArray();
+
+        $counterName = $setting?->counter_name ?? "Petugas {$title}";
 
         return view('queue.dashboard', [
             'title' => $counterName,
             'service' => $serviceKey,
             'currentQueue' => $this->activeQueue($settingId),
-            'waitingCount' => $settingId ? Queue::query()->where('service_setting_id', $settingId)->whereDate('created_at', now()->toDateString())->where('status', QueueStatus::WAITING)->count() : 0,
-            'waitingQueues' => $settingId ? Queue::query()->where('service_setting_id', $settingId)->whereDate('created_at', now()->toDateString())->where('status', QueueStatus::WAITING)->oldest('id')->limit(10)->get() : collect(),
-            'recentQueues' => $settingId ? Queue::query()->where('service_setting_id', $settingId)->whereDate('created_at', now()->toDateString())->whereIn('status', [QueueStatus::COMPLETED, QueueStatus::SKIPPED])->latest('updated_at')->limit(8)->get() : collect(),
+            'waitingCount' => !empty($allServiceSettingIds) ? Queue::query()
+                ->withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+                ->whereIn('service_setting_id', $allServiceSettingIds)
+                ->whereDate('created_at', now()->toDateString())
+                ->where('status', QueueStatus::WAITING)
+                ->count() : 0,
+            'waitingQueues' => !empty($allServiceSettingIds) ? Queue::query()
+                ->withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+                ->whereIn('service_setting_id', $allServiceSettingIds)
+                ->whereDate('created_at', now()->toDateString())
+                ->where('status', QueueStatus::WAITING)
+                ->oldest('id')
+                ->limit(10)
+                ->get() : collect(),
+            'recentQueues' => $settingId ? Queue::query()
+                ->withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+                ->where('service_setting_id', $settingId)
+                ->whereDate('created_at', now()->toDateString())
+                ->whereIn('status', [QueueStatus::COMPLETED, QueueStatus::SKIPPED])
+                ->latest('updated_at')
+                ->limit(8)
+                ->get() : collect(),
         ]);
     }
 
     private function callNext(string $serviceKey): RedirectResponse
     {
-        $setting = ServiceSetting::query()->where('service', $serviceKey)->first();
+        $setting = $this->resolveServiceSetting($serviceKey);
         if (! $setting) return back()->with('status', 'Layanan tidak ditemukan.');
 
-        $queue = DB::transaction(function () use ($setting) {
+        $allServiceSettingIds = ServiceSetting::query()
+            ->where('service', $serviceKey)
+            ->pluck('id')
+            ->toArray();
+
+        $queue = DB::transaction(function () use ($setting, $allServiceSettingIds) {
             Queue::query()
+                ->withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
                 ->where('service_setting_id', $setting->id)
                 ->where('served_by', auth()->id())
-                ->where('status', QueueStatus::CALLED)
+                ->whereIn('status', [QueueStatus::CALLED, QueueStatus::SERVING])
                 ->update(['status' => QueueStatus::COMPLETED]);
 
             $next = Queue::query()
-                ->where('service_setting_id', $setting->id)
+                ->withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+                ->whereIn('service_setting_id', $allServiceSettingIds)
                 ->whereDate('created_at', now()->toDateString())
                 ->where('status', QueueStatus::WAITING)
                 ->orderBy('id')
@@ -251,6 +347,7 @@ class QueueController extends Controller
                     'status' => QueueStatus::CALLED,
                     'called_at' => now(),
                     'served_by' => auth()->id(),
+                    'service_setting_id' => $setting->id,
                 ]);
             }
 
@@ -261,12 +358,12 @@ class QueueController extends Controller
             return back()->with('status', 'Tidak ada antrean yang menunggu.');
         }
 
-        return back()->with('status', "Antrean {$queue->number} dipanggil.");
+        return back()->with('status', "Antrean {$queue->number} dipanggil ke {$setting->counter_name}.");
     }
 
     private function complete(string $serviceKey): RedirectResponse
     {
-        $setting = ServiceSetting::query()->where('service', $serviceKey)->first();
+        $setting = $this->resolveServiceSetting($serviceKey);
         $queue = $setting ? $this->activeQueue($setting->id) : null;
         if (! $queue) return back()->with('status', 'Belum ada antrean aktif.');
         $queue->update(['status' => QueueStatus::COMPLETED]);
@@ -275,7 +372,7 @@ class QueueController extends Controller
 
     private function skip(string $serviceKey): RedirectResponse
     {
-        $setting = ServiceSetting::query()->where('service', $serviceKey)->first();
+        $setting = $this->resolveServiceSetting($serviceKey);
         $queue = $setting ? $this->activeQueue($setting->id) : null;
         if (! $queue) return back()->with('status', 'Belum ada antrean aktif.');
         $queue->update(['status' => QueueStatus::SKIPPED]);
@@ -284,11 +381,14 @@ class QueueController extends Controller
 
     private function recall(string $serviceKey): RedirectResponse
     {
-        $setting = ServiceSetting::query()->where('service', $serviceKey)->first();
+        $setting = $this->resolveServiceSetting($serviceKey);
         $queue = $setting ? $this->activeQueue($setting->id) : null;
         if (! $queue) return back()->with('status', 'Belum ada antrean aktif.');
-        $queue->update(['called_at' => now()]);
-        return back()->with('status', "Antrean {$queue->number} dipanggil ulang.");
+        $queue->update([
+            'called_at' => now(),
+            'service_setting_id' => $setting->id,
+        ]);
+        return back()->with('status', "Antrean {$queue->number} dipanggil ulang ke {$setting->counter_name}.");
     }
 
     private function activeQueue(?int $settingId): ?Queue
@@ -296,9 +396,10 @@ class QueueController extends Controller
         if (! $settingId) return null;
 
         return Queue::query()
+            ->withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
             ->where('service_setting_id', $settingId)
             ->where('served_by', auth()->id())
-            ->where('status', QueueStatus::CALLED)
+            ->whereIn('status', [QueueStatus::CALLED, QueueStatus::SERVING])
             ->latest('called_at')
             ->first();
     }

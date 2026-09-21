@@ -412,21 +412,21 @@
 
                     <form method="POST" action="{{ $service==='cs'?route('queue.recall.cs'):route('queue.recall.teller') }}">
                         @csrf
-                        <button type="submit" class="btn-ctrl btn-recall">
+                        <button type="submit" class="btn-ctrl btn-recall" {{ $currentQueue ? '' : 'disabled style=opacity:0.5;cursor:not-allowed;' }}>
                             <span>🔊 Panggil Ulang</span>
                         </button>
                     </form>
 
                     <form method="POST" action="{{ $service==='cs'?route('queue.complete.cs'):route('queue.complete.teller') }}">
                         @csrf
-                        <button type="submit" class="btn-ctrl btn-complete">
+                        <button type="submit" class="btn-ctrl btn-complete" {{ $currentQueue ? '' : 'disabled style=opacity:0.5;cursor:not-allowed;' }}>
                             <span>✓ Selesai Dilayani</span>
                         </button>
                     </form>
 
                     <form method="POST" action="{{ $service==='cs'?route('queue.skip.cs'):route('queue.skip.teller') }}" style="grid-column: span 2;">
                         @csrf
-                        <button type="submit" class="btn-ctrl btn-skip">
+                        <button type="submit" class="btn-ctrl btn-skip" {{ $currentQueue ? '' : 'disabled style=opacity:0.5;cursor:not-allowed;' }}>
                             <span>✕ Lewati Antrean Ini</span>
                         </button>
                     </form>
