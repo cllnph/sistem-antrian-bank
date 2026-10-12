@@ -6,6 +6,9 @@ return [
 
     // Navigation & Dashboard
     'dashboard' => 'Main Dashboard',
+    'nav_group_queue' => 'Queue Operations',
+    'nav_group_org' => 'Organization & Counters',
+    'nav_group_user' => 'User Management',
     'admin_dashboard' => 'Administrator Dashboard',
     'teller_dashboard' => 'TASPEN Cashier & Pension Teller Dashboard',
     'cs_dashboard' => 'Pension Credit & Administration CS Dashboard',

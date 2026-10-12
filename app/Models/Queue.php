@@ -6,6 +6,7 @@ use App\Enums\QueueStatus;
 use App\Models\Scopes\ServiceSettingScope;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Queue extends Model
 {
@@ -15,6 +16,7 @@ class Queue extends Model
     }
 
     protected $fillable = [
+        'branch_id',
         'number',
         'service_setting_id',
         'status',
@@ -30,6 +32,11 @@ class Queue extends Model
         ];
     }
 
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class, 'branch_id');
+    }
+
     public function serviceSetting(): BelongsTo
     {
         return $this->belongsTo(ServiceSetting::class, 'service_setting_id');
@@ -38,5 +45,10 @@ class Queue extends Model
     public function servedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'served_by');
+    }
+
+    public function logs(): HasMany
+    {
+        return $this->hasMany(QueueLog::class, 'queue_id');
     }
 }

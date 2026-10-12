@@ -3,77 +3,127 @@
 namespace App\Http\Controllers;
 
 use App\Enums\QueueStatus;
+use App\Models\Branch;
 use App\Models\Queue;
 use App\Models\ServiceSetting;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class DisplayController extends Controller
 {
-    public function index(): View
+    protected function resolveBranch(Request $request, ?string $branchIdentifier = null): Branch
     {
+        if ($branchIdentifier) {
+            $branch = Branch::query()
+                ->where('code', $branchIdentifier)
+                ->orWhere('slug', $branchIdentifier)
+                ->orWhere('id', $branchIdentifier)
+                ->first();
+            if ($branch) return $branch;
+        }
+
+        $param = $request->query('branch') ?? $request->query('cabang');
+        if ($param) {
+            $branch = Branch::query()
+                ->where('code', $param)
+                ->orWhere('slug', $param)
+                ->orWhere('id', $param)
+                ->first();
+            if ($branch) return $branch;
+        }
+
+        if (auth()->check() && auth()->user()->branch_id) {
+            $branch = auth()->user()->branch;
+            if ($branch) return $branch;
+        }
+
+        return Branch::query()->where('code', '001')->first() 
+            ?? Branch::query()->where('is_active', true)->first() 
+            ?? Branch::first();
+    }
+
+    public function index(Request $request, ?string $branch = null): View
+    {
+        $currentBranch = $this->resolveBranch($request, $branch);
+        $allBranches = Branch::query()->where('is_active', true)->orderBy('code')->get();
+
         return view('display', [
-            'initialData' => $this->buildDisplayData(),
+            'branch' => $currentBranch,
+            'allBranches' => $allBranches,
+            'initialData' => $this->buildDisplayData($currentBranch),
         ]);
     }
 
-    public function getDisplayData(): JsonResponse
+    public function getDisplayData(Request $request, ?string $branch = null): JsonResponse
     {
-        return response()->json($this->buildDisplayData());
+        $currentBranch = $this->resolveBranch($request, $branch);
+
+        return response()->json($this->buildDisplayData($currentBranch));
     }
 
-    public function buildDisplayData(): array
+    public function buildDisplayData(?Branch $branch = null): array
     {
-        $activeSettings = ServiceSetting::query()->where('is_active', true)->get();
-        $allSettings = ServiceSetting::query()->get();
-        $settingIds = $activeSettings->pluck('id')->toArray();
+        if (! $branch) {
+            $branch = Branch::query()->where('code', '001')->first() ?? Branch::first();
+        }
 
+        $branchId = $branch?->id;
+
+        $activeSettings = ServiceSetting::query()
+            ->when($branchId, fn ($q) => $q->where('branch_id', $branchId))
+            ->where('is_active', true)
+            ->get();
+
+        $allSettings = ServiceSetting::query()
+            ->when($branchId, fn ($q) => $q->where('branch_id', $branchId))
+            ->get();
+
+        $settingIds = $activeSettings->pluck('id')->toArray();
         $today = now()->toDateString();
 
         $csIds = $allSettings->where('service', 'cs')->pluck('id')->toArray();
         $tellerIds = $allSettings->where('service', 'teller')->pluck('id')->toArray();
         $umumIds = $allSettings->where('service', 'umum')->pluck('id')->toArray();
 
-        $csWaitCount = empty($csIds) ? 0 : Queue::query()
+        $baseQueueQuery = fn () => Queue::query()
             ->withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+            ->when($branchId, fn ($q) => $q->where('branch_id', $branchId));
+
+        $csWaitCount = empty($csIds) ? 0 : $baseQueueQuery()
             ->whereIn('service_setting_id', $csIds)
             ->whereDate('created_at', $today)
             ->where('status', QueueStatus::WAITING)
             ->count();
 
-        $tellerWaitCount = empty($tellerIds) ? 0 : Queue::query()
-            ->withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+        $tellerWaitCount = empty($tellerIds) ? 0 : $baseQueueQuery()
             ->whereIn('service_setting_id', $tellerIds)
             ->whereDate('created_at', $today)
             ->where('status', QueueStatus::WAITING)
             ->count();
 
-        $umumWaitCount = empty($umumIds) ? 0 : Queue::query()
-            ->withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+        $umumWaitCount = empty($umumIds) ? 0 : $baseQueueQuery()
             ->whereIn('service_setting_id', $umumIds)
             ->whereDate('created_at', $today)
             ->where('status', QueueStatus::WAITING)
             ->count();
 
         // Earliest waiting ticket to be called next
-        $nextCsWaiting = empty($csIds) ? null : Queue::query()
-            ->withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+        $nextCsWaiting = empty($csIds) ? null : $baseQueueQuery()
             ->whereIn('service_setting_id', $csIds)
             ->whereDate('created_at', $today)
             ->where('status', QueueStatus::WAITING)
             ->orderBy('id', 'asc')
             ->value('number');
 
-        $nextTellerWaiting = empty($tellerIds) ? null : Queue::query()
-            ->withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+        $nextTellerWaiting = empty($tellerIds) ? null : $baseQueueQuery()
             ->whereIn('service_setting_id', $tellerIds)
             ->whereDate('created_at', $today)
             ->where('status', QueueStatus::WAITING)
             ->orderBy('id', 'asc')
             ->value('number');
 
-        $nextUmumWaiting = empty($umumIds) ? null : Queue::query()
-            ->withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+        $nextUmumWaiting = empty($umumIds) ? null : $baseQueueQuery()
             ->whereIn('service_setting_id', $umumIds)
             ->whereDate('created_at', $today)
             ->where('status', QueueStatus::WAITING)
@@ -81,8 +131,7 @@ class DisplayController extends Controller
             ->value('number');
 
         // Single query for all CALLED/SERVING queues grouped by service_setting_id
-        $calledQueues = empty($settingIds) ? collect() : Queue::query()
-            ->withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+        $calledQueues = empty($settingIds) ? collect() : $baseQueueQuery()
             ->with(['servedBy.serviceSetting'])
             ->whereIn('service_setting_id', $settingIds)
             ->whereDate('created_at', $today)
@@ -135,8 +184,7 @@ class DisplayController extends Controller
         $tellerSetting = $activeSettings->firstWhere('service', 'teller');
         $umumSetting = $activeSettings->firstWhere('service', 'umum');
 
-        $maxTellerSeq = Queue::query()
-            ->withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+        $maxTellerSeq = empty($tellerIds) ? 0 : ($baseQueueQuery()
             ->whereIn('service_setting_id', $tellerIds)
             ->whereDate('created_at', $today)
             ->where('number', 'like', 'T-%')
@@ -145,11 +193,10 @@ class DisplayController extends Controller
                 $parts = explode('-', $q->number);
                 return (int) end($parts);
             })
-            ->max() ?? 0;
+            ->max() ?? 0);
         $nextTellerNumber = sprintf('T-%03d', $maxTellerSeq + 1);
 
-        $maxCsSeq = Queue::query()
-            ->withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+        $maxCsSeq = empty($csIds) ? 0 : ($baseQueueQuery()
             ->whereIn('service_setting_id', $csIds)
             ->whereDate('created_at', $today)
             ->where('number', 'like', 'CS-%')
@@ -158,7 +205,7 @@ class DisplayController extends Controller
                 $parts = explode('-', $q->number);
                 return (int) end($parts);
             })
-            ->max() ?? 0;
+            ->max() ?? 0);
         $nextCsNumber = sprintf('CS-%03d', $maxCsSeq + 1);
 
         $allCsCalled = $calledQueues->filter(fn ($val, $key) => in_array($key, $csIds))->flatten(1)->sortByDesc('called_at');
@@ -166,6 +213,16 @@ class DisplayController extends Controller
         $allUmumCalled = $calledQueues->filter(fn ($val, $key) => in_array($key, $umumIds))->flatten(1)->sortByDesc('called_at');
 
         return [
+            'branch' => [
+                'id' => $branch->id,
+                'code' => $branch->code,
+                'slug' => $branch->slug,
+                'name' => $branch->name,
+                'type' => $branch->type,
+                'address' => $branch->address,
+                'phone' => $branch->phone,
+                'operating_hours' => $branch->operating_hours,
+            ],
             'counters' => $countersData,
             'total_active' => count($countersData),
             'cs' => $this->formatQueueData($allCsCalled, $csSetting?->counter_name ?? 'Loket CS'),

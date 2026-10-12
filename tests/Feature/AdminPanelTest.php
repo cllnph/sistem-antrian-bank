@@ -73,4 +73,52 @@ class AdminPanelTest extends TestCase
             ->assertSee('T-001')
             ->assertDontSee('T-002');
     }
+
+    #[Test]
+    public function test_admin_has_impersonate_capabilities(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $teller = User::factory()->create();
+        $teller->assignRole('teller');
+
+        $this->assertTrue($admin->canImpersonate());
+        $this->assertFalse($teller->canImpersonate());
+        $this->assertTrue($teller->canBeImpersonated());
+    }
+
+    #[Test]
+    public function test_admin_can_access_user_resource_table(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $teller = User::factory()->create(['name' => 'Teller Cabang Bogor']);
+        $teller->assignRole('teller');
+
+        $this->actingAs($admin)->get('/admin/users')
+            ->assertOk()
+            ->assertSee('Teller Cabang Bogor');
+    }
+
+    #[Test]
+    public function test_admin_can_access_control_center_page(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $this->actingAs($admin)->get('/admin/admin-control-center')
+            ->assertOk();
+    }
+
+    #[Test]
+    public function test_admin_can_access_roles_page(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $this->actingAs($admin)->get('/admin/roles')
+            ->assertOk();
+    }
 }

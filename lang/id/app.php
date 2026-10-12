@@ -6,6 +6,9 @@ return [
 
     // 1. Sidebar Navigation
     'dashboard' => 'Dasbor Utama',
+    'nav_group_queue' => 'Operasional Antrean',
+    'nav_group_org' => 'Struktur Organisasi & Loket',
+    'nav_group_user' => 'Manajemen Pengguna',
     'admin_dashboard' => 'Dasbor Administrator',
     'teller_dashboard' => 'Dasbor Teller Kas & Pensiun TASPEN',
     'cs_dashboard' => 'Dasbor Layanan Pelanggan & Administrasi',

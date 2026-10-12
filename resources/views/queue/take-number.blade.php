@@ -135,13 +135,15 @@
         .brand-slogan-badge {
             background: #F3B313;
             color: #002B49;
-            font-family: 'Inter', sans-serif;
-            font-size: 11.5px;
+            font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+            font-size: 12px;
             font-weight: 800;
-            padding: 2px 10px;
-            border-radius: 6px;
+            font-style: italic;
+            padding: 3px 12px;
+            border-radius: 8px;
             letter-spacing: -0.2px;
-            box-shadow: 0 2px 6px rgba(243, 179, 19, 0.35);
+            box-shadow: 0 2px 8px rgba(243, 179, 19, 0.4);
+            white-space: nowrap;
         }
 
         /* Header Center Title: Pengambilan Tiket Antrean (Konsisten dengan Display) */
@@ -952,7 +954,7 @@
 
     <header class="kiosk-header">
         <div class="brand">
-            <a href="/" class="brand-logo-wrap">
+            <a href="{{ url('/ambil-nomor') }}" class="brand-logo-wrap">
                 @include('components.bank-logo', ['height' => '42px'])
             </a>
             <div class="brand-info">
@@ -962,7 +964,7 @@
 
         <div class="header-center-title">
             <h1 class="kiosk-header-title">PENGAMBILAN TIKET ANTREAN</h1>
-            <p class="kiosk-header-subtitle">Pilih layanan Teller atau Customer Service sesuai kebutuhan Anda.</p>
+            <p class="kiosk-header-subtitle">Silakan sentuh tombol layanan di bawah untuk mengambil nomor antrean</p>
         </div>
 
         <div class="header-meta">
@@ -1051,7 +1053,7 @@
                         @endif
                     </div>
 
-                    <button type="button" class="btn-take btn-cs" data-service="cs" data-label="Customer Service & Kredit Pensiun" data-counter="{{ $csCounterName }}" data-next="{{ $nextCsNumber }}" onclick="openConfirmModalFromBtn(this)" {{ !$csActive ? 'disabled' : '' }}>
+                    <button type="button" class="btn-take btn-cs" data-service="cs" data-label="Customer Service & Kredit Pensiun" data-counter="{{ $csCounterName }}" data-next="{{ $nextCsNumber }}" onclick="takeTicketInstant(this)" {{ !$csActive ? 'disabled' : '' }}>
                         <x-heroicon-o-ticket style="width: 28px; height: 28px; flex-shrink: 0;" />
                         <span>{{ $csActive ? 'Ambil Tiket' : 'Layanan Tutup' }}</span>
                     </button>
@@ -1104,7 +1106,7 @@
                         @endif
                     </div>
 
-                    <button type="button" class="btn-take btn-teller" data-service="teller" data-label="Teller Kas & Pensiun TASPEN" data-counter="{{ $tellerCounterName }}" data-next="{{ $nextTellerNumber }}" onclick="openConfirmModalFromBtn(this)" {{ !$tellerActive ? 'disabled' : '' }}>
+                    <button type="button" class="btn-take btn-teller" data-service="teller" data-label="Teller Kas & Pensiun TASPEN" data-counter="{{ $tellerCounterName }}" data-next="{{ $nextTellerNumber }}" onclick="takeTicketInstant(this)" {{ !$tellerActive ? 'disabled' : '' }}>
                         <x-heroicon-o-ticket style="width: 28px; height: 28px; flex-shrink: 0;" />
                         <span>{{ $tellerActive ? 'Ambil Tiket' : 'Layanan Tutup' }}</span>
                     </button>
@@ -1195,19 +1197,26 @@
             </div>
 
             <!-- Struk Cetak Thermal (Khusus untuk @media print, Tanpa Gambar Logo/Barcode) -->
-            <div class="receipt-paper" id="receiptPaper" style="display: none;">
-                <div class="receipt-header" style="margin-bottom: 10px; border-bottom: 1.5px dashed #000000; padding-bottom: 8px;">
-                    <div style="font-family: 'Inter', sans-serif; font-weight: 900; font-size: 19px; color: #000000; letter-spacing: 0.5px;">Nomor Antrean</div>
-                    <div id="ticketModalDate" style="font-size: 10px; color: #333333; font-weight: 600; margin-top: 3px;">{{ now()->translatedFormat('l, d F Y') }} · {{ now()->format('H:i') }} WIB</div>
+            <div class="receipt-paper" id="receiptPaper" style="display: none; text-align: center;">
+                <div class="receipt-header" style="margin-bottom: 8px; border-bottom: 1.5px dashed #000000; padding-bottom: 6px;">
+                    <div style="font-family: 'Inter', sans-serif; font-weight: 900; font-size: 15px; color: #000000; letter-spacing: 0.5px;">PT BPR DP TASPEN</div>
+                    <div id="receiptBranchName" style="font-family: 'Inter', sans-serif; font-weight: 800; font-size: 12px; color: #000000; text-transform: uppercase;">{{ $branch->name }}</div>
+                    @if($branch->address)
+                    <div id="receiptBranchAddress" style="font-size: 8.5px; color: #222222; margin-top: 2px; line-height: 1.2;">{{ $branch->address }}</div>
+                    @endif
+                    @if($branch->phone)
+                    <div id="receiptBranchPhone" style="font-size: 8.5px; color: #222222;">Telp: {{ $branch->phone }}</div>
+                    @endif
+                    <div id="ticketModalDate" style="font-size: 9.5px; color: #333333; font-weight: 600; margin-top: 4px;">{{ now()->translatedFormat('l, d F Y') }} · {{ now()->format('H:i') }} WIB</div>
                 </div>
-                <div style="margin-bottom: 6px;">
-                    <div id="printReceiptServiceName" style="font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 800; color: #000000; text-transform: uppercase;">TELLER</div>
+                <div style="margin-bottom: 4px;">
+                    <div id="printReceiptServiceName" style="font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 800; color: #000000; text-transform: uppercase;">TELLER</div>
                 </div>
-                <div style="margin: 8px 0;">
+                <div style="margin: 6px 0;">
                     <div style="font-size: 10px; letter-spacing: 1px; color: #333333; font-weight: 700;">NOMOR ANTREAN</div>
-                    <div id="printReceiptNumber" style="font-family: 'Inter', sans-serif; font-size: 48px; font-weight: 900; color: #000000; line-height: 1; letter-spacing: 2px; margin: 4px 0;">T-001</div>
+                    <div id="printReceiptNumber" style="font-family: 'Inter', sans-serif; font-size: 46px; font-weight: 900; color: #000000; line-height: 1; letter-spacing: 2px; margin: 4px 0;">T-001</div>
                 </div>
-                <div class="receipt-footer" style="border-top: 1.5px dashed #000000; padding-top: 8px; margin-top: 10px; font-size: 10px; color: #333333;">
+                <div class="receipt-footer" style="border-top: 1.5px dashed #000000; padding-top: 6px; margin-top: 8px; font-size: 9px; color: #333333; line-height: 1.3;">
                     <div>Silakan menunggu nomor Anda dipanggil.</div>
                     <div style="margin-top: 2px;">Terima kasih atas kunjungan Anda</div>
                 </div>
@@ -1220,7 +1229,7 @@
         <div class="footer-waiting-text">Tekan tombol untuk mengambil tiket</div>
         <div class="footer-hours-item">
             <x-heroicon-o-clock class="kiosk-icon kiosk-icon-sm text-emerald" />
-            <span><strong>Jam Layanan:</strong> Senin – Jumat (08.00 – 16.00 WIB)</span>
+            <span><strong>Jam Layanan:</strong> {{ $branch->operating_hours }}</span>
         </div>
     </footer>
 
@@ -1233,10 +1242,14 @@
             document.getElementById('clockDate').textContent = now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
         }
         setInterval(updateClock, 1000);
-        updateClock();
-        // Real-time Live Polling via /api/display/data (Every 4 seconds)
+        // Simpan kode cabang ke LocalStorage agar perangkat Kiosk ini selalu mengingat cabangnya
+        try {
+            localStorage.setItem('bank_kiosk_branch_code', "{{ $branch->code }}");
+        } catch (e) {}
+
+        // Real-time Live Polling via /api/display/data/{branch_code} (Every 4 seconds)
         function refreshLiveQueueData() {
-            fetch('/api/display/data')
+            fetch("{{ url('/api/display/data/' . $branch->code) }}")
                 .then(res => res.json())
                 .then(data => {
                     if (!data) return;
@@ -1361,105 +1374,53 @@
             });
         }
 
-        function openConfirmModalFromBtn(btn) {
-            // Anti double-tap: lock all take buttons and show visual loading state on clicked button
-            document.querySelectorAll('.btn-take').forEach(b => {
-                b.disabled = true;
-            });
-            btn.classList.add('is-loading');
-            if (!btn.getAttribute('data-original-html')) {
-                btn.setAttribute('data-original-html', btn.innerHTML);
-            }
-            btn.innerHTML = `
-                <div style="width: 22px; height: 22px; border: 3px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spinRing 0.8s linear infinite;"></div>
-                <span>Membuka Konfirmasi...</span>
-            `;
+        let isTakingTicket = false;
+        let autoCloseCountdownTimer = null;
+
+        function playKioskTapTone() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(659.25, ctx.currentTime); // E5
+                osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.1); // A5
+                gain.gain.setValueAtTime(0.2, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.1);
+            } catch (e) {}
+        }
+
+        // 1-Tap Instant Ticket: Sekali sentuh tombol langsung menerbitkan & mencetak tiket
+        function takeTicketInstant(btn) {
+            if (isTakingTicket) return;
+            isTakingTicket = true;
 
             const serviceKey = btn.getAttribute('data-service');
             const serviceLabel = btn.getAttribute('data-label');
             const counterName = btn.getAttribute('data-counter');
-            const nextNumber = btn.getAttribute('data-next');
-
-            showConfirmModal(serviceKey, serviceLabel, counterName, '', nextNumber);
-        }
-
-        function showConfirmModal(serviceKey, serviceLabel, counterName, waitTime, nextNumber) {
             selectedServiceKey = serviceKey;
             selectedServiceLabel = serviceLabel;
             selectedCounterName = counterName;
-            selectedNextNumber = nextNumber;
 
-            const sNameEl = document.getElementById('confirmServiceName');
-            const cNameEl = document.getElementById('confirmCounterName');
-            const nNumEl = document.getElementById('confirmNextNumber');
-            const btnYes = document.getElementById('btnConfirmYes');
-            const btnCancel = document.getElementById('btnConfirmCancel');
+            playKioskTapTone();
 
-            if (sNameEl) sNameEl.textContent = serviceLabel;
-            if (cNameEl) cNameEl.textContent = counterName;
-            if (nNumEl) nNumEl.textContent = nextNumber;
-
-            // Reset Yes button UI
-            if (btnYes) {
-                btnYes.disabled = false;
-                btnYes.style.opacity = '1';
-                const checkIconHtml = document.getElementById('tplKioskCheckIcon')?.innerHTML || '';
-                btnYes.innerHTML = `
-                    ${checkIconHtml}
-                    <span>Ya, Ambil Nomor Antrean</span>
-                `;
-            }
-            if (btnCancel) {
-                btnCancel.style.display = 'inline-flex';
-                btnCancel.disabled = false;
-            }
-
-            const overlay = document.getElementById('confirmModalOverlay');
-            if (overlay) {
-                overlay.style.display = 'flex';
-                overlay.style.opacity = '1';
-            }
-        }
-
-        function closeConfirmModal() {
-            if (yaCountdownInterval) {
-                clearInterval(yaCountdownInterval);
-                yaCountdownInterval = null;
-            }
-
-            const overlay = document.getElementById('confirmModalOverlay');
-            if (overlay) {
-                overlay.style.display = 'none';
-            }
-
-            selectedServiceKey = '';
-            resetTakeButtons();
-        }
-
-        // 1. Tombol 'Ya' langsung menerbitkan tiket dan memunculkan hasil tiket fisik seketika
-        function onConfirmYesClicked() {
-            if (!selectedServiceKey) return;
-
-            const btnYes = document.getElementById('btnConfirmYes');
-            const btnCancel = document.getElementById('btnConfirmCancel');
-
-            if (btnYes) {
-                btnYes.disabled = true;
-                btnYes.style.opacity = '0.85';
-                btnYes.innerHTML = `
-                    <div style="width: 18px; height: 18px; border: 2.5px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spinRing 0.8s linear infinite;"></div>
-                    <span>Menerbitkan Tiket...</span>
-                `;
-            }
-            if (btnCancel) {
-                btnCancel.disabled = true;
-            }
+            // Ubah tampilan tombol saat proses
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.style.opacity = '0.85';
+            btn.innerHTML = `
+                <div style="width: 22px; height: 22px; border: 2.5px solid rgba(255,255,255,0.4); border-top-color: white; border-radius: 50%; animation: spinRing 0.8s linear infinite;"></div>
+                <span>Mencetak Tiket...</span>
+            `;
 
             const csrfToken = document.querySelector('input[name="_token"]')?.value 
                 || document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 
-            // Simpan pendaftaran nomor antrean ke database via AJAX secara langsung
-            fetch("{{ route('queue.store-number') }}", {
+            fetch("{{ url('/ambil-nomor') }}", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -1467,37 +1428,35 @@
                     "X-CSRF-TOKEN": csrfToken
                 },
                 body: JSON.stringify({
-                    service: selectedServiceKey
+                    service: serviceKey,
+                    branch_id: {{ $branch->id }}
                 })
             })
             .then(res => res.json())
             .then(data => {
-                const finalTicketNumber = (data && data.success) ? data.ticket : selectedNextNumber;
-                
-                // Tutup modal konfirmasi
-                const confirmOverlay = document.getElementById('confirmModalOverlay');
-                if (confirmOverlay) {
-                    confirmOverlay.style.display = 'none';
+                if (data && data.success) {
+                    showPhysicalTicketResult(data.ticket, data);
+                    refreshLiveQueueData();
+                } else {
+                    alert(data?.message || 'Mohon maaf, layanan sedang sibuk. Silakan coba tekan tombol kembali.');
                 }
-
-                // Langsung munculkan hasil tiket fisiknya di layar
-                showPhysicalTicketResult(finalTicketNumber);
             })
             .catch(err => {
                 console.error("Gagal simpan antrean:", err);
-                const confirmOverlay = document.getElementById('confirmModalOverlay');
-                if (confirmOverlay) {
-                    confirmOverlay.style.display = 'none';
-                }
-
-                showPhysicalTicketResult(selectedNextNumber);
+                alert('Mohon maaf, terjadi gangguan koneksi ke server loket. Silakan tekan tombol sekali lagi.');
+            })
+            .finally(() => {
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+                btn.style.opacity = '1';
+                isTakingTicket = false;
             });
         }
 
-        // 2. Langsung tampilkan hasil tiket fisiknya di layar & cetak struk kertas
-        function showPhysicalTicketResult(finalTicketNumber) {
+        // Tampilkan struk fisik di layar & cetak kertas otomatis
+        function showPhysicalTicketResult(finalTicketNumber, data = null) {
             const ticketOverlay = document.getElementById('ticketModalOverlay');
-            const sName = selectedServiceKey === 'teller' ? 'TELLER' : 'CUSTOMER SERVICE';
+            const sName = (data && data.service_name) ? data.service_name : (selectedServiceKey === 'teller' ? 'TELLER' : 'CUSTOMER SERVICE');
 
             const digitalService = document.getElementById('digitalTicketServiceName');
             const digitalNum = document.getElementById('digitalTicketNumber');
@@ -1509,26 +1468,56 @@
             if (printSName) printSName.textContent = sName;
             if (printNum) printNum.textContent = finalTicketNumber;
 
+            if (data) {
+                const branchNameEl = document.getElementById('receiptBranchName');
+                const branchAddressEl = document.getElementById('receiptBranchAddress');
+                const branchPhoneEl = document.getElementById('receiptBranchPhone');
+                const ticketDateEl = document.getElementById('ticketModalDate');
+
+                if (branchNameEl && data.branch_name) branchNameEl.textContent = data.branch_name;
+                if (branchAddressEl && data.branch_address) branchAddressEl.textContent = data.branch_address;
+                if (branchPhoneEl && data.branch_phone) branchPhoneEl.textContent = 'Telp: ' + data.branch_phone;
+                if (ticketDateEl && data.date_formatted) ticketDateEl.textContent = data.date_formatted;
+            }
+
             if (ticketOverlay) {
                 ticketOverlay.style.display = 'flex';
                 ticketOverlay.style.opacity = '1';
             }
 
-            // Otomatis cetak ke printer thermal (jika terhubung)
+            // Otomatis cetak ke printer thermal kertas
             try {
                 window.print();
             } catch (e) {
                 console.log("Print:", e);
             }
 
-            // Kiosk otomatis kembali ke menu utama setelah 10 detik jika tidak ada interaksi
-            setTimeout(function() {
-                window.location.href = window.location.pathname;
-            }, 10000);
+            // Countdown 6 detik otomatis kembali ke layar utama
+            let remainingSeconds = 6;
+            const cancelBtn = document.querySelector('.btn-modal-cancel span');
+            if (autoCloseCountdownTimer) clearInterval(autoCloseCountdownTimer);
+            autoCloseCountdownTimer = setInterval(() => {
+                remainingSeconds--;
+                if (cancelBtn) {
+                    cancelBtn.textContent = `Kembali ke Layar Utama (${remainingSeconds}s)`;
+                }
+                if (remainingSeconds <= 0) {
+                    clearInterval(autoCloseCountdownTimer);
+                    closeModal();
+                }
+            }, 1000);
         }
 
         function closeModal() {
-            window.location.href = window.location.pathname;
+            if (autoCloseCountdownTimer) clearInterval(autoCloseCountdownTimer);
+            const ticketOverlay = document.getElementById('ticketModalOverlay');
+            if (ticketOverlay) {
+                ticketOverlay.style.display = 'none';
+            }
+            const cancelBtn = document.querySelector('.btn-modal-cancel span');
+            if (cancelBtn) {
+                cancelBtn.textContent = 'Kembali ke Menu Utama';
+            }
         }
 
         // URL preview handlers for testing modal & loading screen

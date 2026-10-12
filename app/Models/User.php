@@ -23,6 +23,7 @@ class User extends Authenticatable implements FilamentUser
         'email',
         'locale',
         'service_setting_id',
+        'branch_id',
         'password',
         'is_active',
         'last_login_at',
@@ -31,6 +32,11 @@ class User extends Authenticatable implements FilamentUser
     public function serviceSetting(): BelongsTo
     {
         return $this->belongsTo(ServiceSetting::class, 'service_setting_id');
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class, 'branch_id');
     }
 
     protected $hidden = [
@@ -71,5 +77,15 @@ class User extends Authenticatable implements FilamentUser
         }
 
         return $this->can('access_admin_panel') || $this->can('view_any_queue');
+    }
+
+    public function canImpersonate(): bool
+    {
+        return $this->hasRole('admin');
+    }
+
+    public function canBeImpersonated(): bool
+    {
+        return $this->is_active;
     }
 }

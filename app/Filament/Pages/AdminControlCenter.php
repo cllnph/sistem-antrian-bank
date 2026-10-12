@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Enums\QueueStatus;
+use App\Models\Branch;
 use App\Models\Queue;
 use App\Models\ServiceSetting;
 use App\Models\User;
@@ -11,8 +12,29 @@ use Filament\Pages\Page;
 
 class AdminControlCenter extends Page
 {
-    protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-chart-bar';
+    protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-presentation-chart-line';
+    protected static ?int $navigationSort = 1;
     protected string $view = 'filament.pages.admin-control-center';
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
+
+    public ?string $selectedBranchId = null;
+
+    public function mount(): void
+    {
+        $user = auth()->user();
+        if ($user && ! $user->hasRole('admin') && $user->branch_id) {
+            $this->selectedBranchId = (string) $user->branch_id;
+        }
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('app.nav_group_queue');
+    }
 
     public static function getNavigationLabel(): string
     {
@@ -35,11 +57,19 @@ class AdminControlCenter extends Page
             return;
         }
 
-        $setting = ServiceSetting::query()->where('service', $serviceKey)->first();
-        if (! $setting) return;
+        $branchId = $this->selectedBranchId ? (int) $this->selectedBranchId : null;
+
+        $settingQuery = ServiceSetting::query()->where('service', $serviceKey);
+        if ($branchId) {
+            $settingQuery->where('branch_id', $branchId);
+        }
+        $settingIds = $settingQuery->pluck('id')->toArray();
+
+        if (empty($settingIds)) return;
 
         $count = Queue::query()
-            ->where('service_setting_id', $setting->id)
+            ->when($branchId, fn ($q) => $q->where('branch_id', $branchId))
+            ->whereIn('service_setting_id', $settingIds)
             ->whereIn('status', [QueueStatus::WAITING, QueueStatus::CALLED])
             ->update(['status' => QueueStatus::SKIPPED]);
 
@@ -53,26 +83,72 @@ class AdminControlCenter extends Page
     protected function getViewData(): array
     {
         $today = now()->startOfDay();
+        $branchId = $this->selectedBranchId ? (int) $this->selectedBranchId : null;
+
         $summary = [];
-        $settings = ServiceSetting::query()->whereIn('service', ['cs', 'teller'])->get()->keyBy('service');
+        $settingsQuery = ServiceSetting::query()->whereIn('service', ['cs', 'teller']);
+        if ($branchId) {
+            $settingsQuery->where('branch_id', $branchId);
+        }
+        $settings = $settingsQuery->get();
 
         foreach (['cs' => __('app.role_cs'), 'teller' => __('app.role_teller')] as $serviceKey => $label) {
-            $setting = $settings->get($serviceKey);
-            $settingId = $setting?->id;
+            $serviceSettingIds = $settings->where('service', $serviceKey)->pluck('id')->toArray();
+
+            $queueQuery = fn () => Queue::query()
+                ->withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+                ->when($branchId, fn ($q) => $q->where('branch_id', $branchId))
+                ->whereIn('service_setting_id', $serviceSettingIds)
+                ->where('created_at', '>=', $today);
 
             $summary[$serviceKey] = [
                 'label' => $label,
-                'waiting' => $settingId ? Queue::query()->where('service_setting_id', $settingId)->where('created_at', '>=', $today)->where('status', QueueStatus::WAITING)->count() : 0,
-                'called' => $settingId ? Queue::query()->where('service_setting_id', $settingId)->where('created_at', '>=', $today)->where('status', QueueStatus::CALLED)->count() : 0,
-                'completed' => $settingId ? Queue::query()->where('service_setting_id', $settingId)->where('created_at', '>=', $today)->where('status', QueueStatus::COMPLETED)->count() : 0,
-                'skipped' => $settingId ? Queue::query()->where('service_setting_id', $settingId)->where('created_at', '>=', $today)->where('status', QueueStatus::SKIPPED)->count() : 0,
+                'waiting' => empty($serviceSettingIds) ? 0 : $queueQuery()->where('status', QueueStatus::WAITING)->count(),
+                'called' => empty($serviceSettingIds) ? 0 : $queueQuery()->where('status', QueueStatus::CALLED)->count(),
+                'completed' => empty($serviceSettingIds) ? 0 : $queueQuery()->where('status', QueueStatus::COMPLETED)->count(),
+                'skipped' => empty($serviceSettingIds) ? 0 : $queueQuery()->where('status', QueueStatus::SKIPPED)->count(),
             ];
         }
 
+        // 9 Branches Aggregated Matrix
+        $allBranches = Branch::where('is_active', true)->orderBy('code')->get();
+        $branchStats = [];
+        foreach ($allBranches as $b) {
+            $bQueues = Queue::withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+                ->where('branch_id', $b->id)
+                ->where('created_at', '>=', $today)
+                ->get();
+
+            $branchStats[] = [
+                'id' => $b->id,
+                'code' => $b->code,
+                'name' => $b->name,
+                'type' => $b->type,
+                'waiting' => $bQueues->where('status', QueueStatus::WAITING)->count(),
+                'called' => $bQueues->where('status', QueueStatus::CALLED)->count(),
+                'completed' => $bQueues->where('status', QueueStatus::COMPLETED)->count(),
+                'total' => $bQueues->count(),
+            ];
+        }
+
+        $staffQuery = User::role(['cs', 'teller'])->with(['roles', 'branch']);
+        if ($branchId) {
+            $staffQuery->where('branch_id', $branchId);
+        }
+
+        $recentQueuesQuery = Queue::withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+            ->with(['serviceSetting', 'branch', 'servedBy'])
+            ->when($branchId, fn ($q) => $q->where('branch_id', $branchId))
+            ->latest('id')
+            ->limit(12);
+
         return [
             'summary' => $summary,
-            'staff' => User::role(['cs', 'teller'])->with('roles')->get(),
-            'recentQueues' => Queue::query()->with('serviceSetting')->latest()->limit(12)->get(),
+            'branchStats' => $branchStats,
+            'branches' => $allBranches,
+            'selectedBranch' => $branchId ? Branch::find($branchId) : null,
+            'staff' => $staffQuery->get(),
+            'recentQueues' => $recentQueuesQuery->get(),
         ];
     }
 }

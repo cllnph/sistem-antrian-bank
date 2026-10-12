@@ -17,6 +17,10 @@ class ServiceSettingScope implements Scope
             $user = auth()->user();
 
             if (! $user->hasRole('admin')) {
+                if ($user->branch_id) {
+                    $builder->where($model->getTable() . '.branch_id', $user->branch_id);
+                }
+
                 $serviceSetting = $user->serviceSetting;
                 $serviceKey = $serviceSetting?->service;
 
@@ -29,7 +33,11 @@ class ServiceSettingScope implements Scope
                 }
 
                 if ($serviceKey) {
-                    $settingIds = \App\Models\ServiceSetting::where('service', $serviceKey)->pluck('id')->toArray();
+                    $settingsQuery = \App\Models\ServiceSetting::where('service', $serviceKey);
+                    if ($user->branch_id) {
+                        $settingsQuery->where('branch_id', $user->branch_id);
+                    }
+                    $settingIds = $settingsQuery->pluck('id')->toArray();
                     $builder->whereIn($model->getTable() . '.service_setting_id', $settingIds);
                 } elseif ($user->service_setting_id) {
                     $builder->where($model->getTable() . '.service_setting_id', $user->service_setting_id);

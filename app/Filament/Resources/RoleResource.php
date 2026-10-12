@@ -20,6 +20,7 @@ class RoleResource extends Resource
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-shield-check';
     protected static ?int $navigationSort = 2;
 
+    public static function getNavigationGroup(): ?string { return __('app.nav_group_user'); }
     public static function getNavigationLabel(): string { return __('app.role_management'); }
     public static function getModelLabel(): string { return __('app.role'); }
     public static function getPluralModelLabel(): string { return __('app.role_management'); }
