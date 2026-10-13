@@ -2,32 +2,17 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Queue;
-use App\Models\ServiceSetting;
-use App\Models\User;
-use Illuminate\View\View;
+use Illuminate\Http\RedirectResponse;
 
 class AdminDashboardController extends Controller
 {
     /**
      * Display the unified operational dashboard hub.
      */
-    public function index()
+    public function index(): RedirectResponse
     {
-        $user = auth()->user();
+        abort_unless(auth()->check(), 403);
 
-        if ($user->hasRole('teller')) {
-            return redirect()->route('teller.dashboard');
-        }
-
-        if ($user->hasRole('cs')) {
-            return redirect()->route('cs.dashboard');
-        }
-
-        $userCount = User::count();
-        $loketCount = ServiceSetting::count();
-        $todayQueueCount = Queue::whereDate('created_at', today())->count();
-
-        return view('admin.dashboard', compact('userCount', 'loketCount', 'todayQueueCount'));
+        return redirect('/admin');
     }
 }

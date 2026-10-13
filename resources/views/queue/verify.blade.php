@@ -177,6 +177,7 @@
             line-height: 1.4;
         }
     </style>
+    <link rel="stylesheet" href="{{ asset('css/bank-ui.css') }}?v=20261012">
 </head>
 <body>
     <div class="verify-card">

@@ -104,7 +104,7 @@
             display: grid;
             grid-template-columns: 1fr auto 1fr;
             align-items: center;
-            padding: 8px 36px;
+            padding: 12px 36px;
             background: rgba(255, 255, 255, 0.96);
             backdrop-filter: blur(16px);
             border-bottom: 3px solid #F3B313;
@@ -148,17 +148,21 @@
 
         /* Header Center Title: Pengambilan Tiket Antrean (Konsisten dengan Display) */
         .header-center-title {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
             text-align: center;
             justify-self: center;
         }
         .kiosk-header-title {
             font-family: 'Inter', sans-serif;
-            font-size: clamp(17px, 1.8vw, 24px);
+            font-size: clamp(26px, 2.5vw, 36px);
             font-weight: 900;
             color: #002B49;
-            letter-spacing: -0.2px;
+            letter-spacing: -0.6px;
             margin: 0;
-            line-height: 1.2;
+            line-height: 1.15;
             text-transform: uppercase;
             white-space: nowrap;
         }
@@ -166,7 +170,7 @@
             font-size: clamp(11.5px, 1vw, 13px);
             color: #475569;
             font-weight: 600;
-            margin: 3px 0 0 0;
+            margin: 0;
             line-height: 1.2;
             letter-spacing: -0.1px;
         }
@@ -815,7 +819,7 @@
                 width: 100%;
             }
             .kiosk-header-title {
-                font-size: 19px;
+                font-size: clamp(24px, 3.2vw, 30px);
                 white-space: normal;
                 text-align: center;
             }
@@ -942,6 +946,7 @@
             }
         }
     </style>
+    <link rel="stylesheet" href="{{ asset('css/bank-ui.css') }}?v=20261012">
 </head>
 <body>
     <!-- Background Layer with Photo Building & Dark Royal Navy Overlay -->
@@ -954,12 +959,9 @@
 
     <header class="kiosk-header">
         <div class="brand">
-            <a href="{{ url('/ambil-nomor') }}" class="brand-logo-wrap">
+            <a href="{{ url('/ambil-nomor/' . $branch->code) }}" class="brand-logo-wrap">
                 @include('components.bank-logo', ['height' => '42px'])
             </a>
-            <div class="brand-info">
-                <span class="brand-slogan-badge">#Mudah dan Nyaman</span>
-            </div>
         </div>
 
         <div class="header-center-title">
@@ -985,14 +987,7 @@
         @endif
 
         @php
-            $now = now()->setTimezone('Asia/Jakarta');
-            $dayOfWeek = $now->dayOfWeek; // 0 = Sunday, 1 = Mon, ..., 5 = Fri, 6 = Sat
-            $isWeekday = ($dayOfWeek >= 1 && $dayOfWeek <= 5);
-            $currentMinutes = ((int)$now->format('H')) * 60 + (int)$now->format('i');
-            $isWithinHours = ($isWeekday && $currentMinutes >= 8 * 60 && $currentMinutes < 16 * 60);
-            
-            // Allow bypass with ?test=1 or ?open=1 for preview / debugging
-            $isServiceHours = $isWithinHours || request()->has('test') || request()->has('open');
+            $isServiceHours = \App\Services\KioskHours::isOpen();
 
             $tellerActive = ($tellerActive ?? (isset($settings['teller']) ? $settings['teller']->is_active : true)) && $isServiceHours;
             $csActive = ($csActive ?? (isset($settings['cs']) ? $settings['cs']->is_active : true)) && $isServiceHours;
@@ -1044,7 +1039,7 @@
                             <div class="closed-notice" style="display: flex; align-items: center; justify-content: center; gap: 6px;">
                                 @if(!$isServiceHours)
                                     <x-heroicon-o-clock class="kiosk-icon" style="color: #dc2626;" />
-                                    <span>Layanan tutup di luar jam operasional (08.00 - 16.00 WIB).</span>
+                                    <span>Pengambilan tiket dibuka Senin - Jumat (04.00 - 18.00 WIB).</span>
                                 @else
                                     <x-heroicon-o-exclamation-triangle class="kiosk-icon" style="color: #dc2626;" />
                                     <span>Layanan Customer Service sedang tidak aktif saat ini.</span>
@@ -1097,7 +1092,7 @@
                             <div class="closed-notice" style="display: flex; align-items: center; justify-content: center; gap: 6px;">
                                 @if(!$isServiceHours)
                                     <x-heroicon-o-clock class="kiosk-icon" style="color: #dc2626;" />
-                                    <span>Layanan tutup di luar jam operasional (08.00 - 16.00 WIB).</span>
+                                    <span>Pengambilan tiket dibuka Senin - Jumat (04.00 - 18.00 WIB).</span>
                                 @else
                                     <x-heroicon-o-exclamation-triangle class="kiosk-icon" style="color: #dc2626;" />
                                     <span>Layanan Teller sedang tidak aktif saat ini.</span>
@@ -1216,6 +1211,7 @@
                     <div style="font-size: 10px; letter-spacing: 1px; color: #333333; font-weight: 700;">NOMOR ANTREAN</div>
                     <div id="printReceiptNumber" style="font-family: 'Inter', sans-serif; font-size: 46px; font-weight: 900; color: #000000; line-height: 1; letter-spacing: 2px; margin: 4px 0;">T-001</div>
                 </div>
+                <a id="ticketVerificationLink" @if(session('verification_url')) href="{{ session('verification_url') }}" @else hidden @endif style="font-size: 10px; overflow-wrap: anywhere;">{{ session('verification_url') }}</a>
                 <div class="receipt-footer" style="border-top: 1.5px dashed #000000; padding-top: 6px; margin-top: 8px; font-size: 9px; color: #333333; line-height: 1.3;">
                     <div>Silakan menunggu nomor Anda dipanggil.</div>
                     <div style="margin-top: 2px;">Terima kasih atas kunjungan Anda</div>
@@ -1229,7 +1225,7 @@
         <div class="footer-waiting-text">Tekan tombol untuk mengambil tiket</div>
         <div class="footer-hours-item">
             <x-heroicon-o-clock class="kiosk-icon kiosk-icon-sm text-emerald" />
-            <span><strong>Jam Layanan:</strong> {{ $branch->operating_hours }}</span>
+            <span><strong>Jam Layanan:</strong> Senin - Jumat (08.00 - 15.00 WIB)</span>
         </div>
     </footer>
 
@@ -1467,6 +1463,15 @@
             if (digitalNum) digitalNum.textContent = finalTicketNumber;
             if (printSName) printSName.textContent = sName;
             if (printNum) printNum.textContent = finalTicketNumber;
+
+            const verificationLink = document.getElementById('ticketVerificationLink');
+            if (verificationLink) {
+                verificationLink.hidden = !data?.verification_url;
+                if (data?.verification_url) {
+                    verificationLink.href = data.verification_url;
+                    verificationLink.textContent = data.verification_url;
+                }
+            }
 
             if (data) {
                 const branchNameEl = document.getElementById('receiptBranchName');

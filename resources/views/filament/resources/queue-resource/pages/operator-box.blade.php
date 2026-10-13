@@ -11,9 +11,9 @@
         $isCs = ($setting?->service ?? '') === 'cs';
     @endphp
 
-    <div class="w-full max-w-[450px]">
+    <div class="bank-operator">
         <x-filament::section
-            :icon="$isCs ? 'heroicon-o-user-group' : 'heroicon-o-banknotes'"
+            :icon="$isCs ? \Filament\Support\Icons\Heroicon::OutlinedUserGroup : \Filament\Support\Icons\Heroicon::OutlinedBanknotes"
             icon-color="primary"
         >
             <x-slot name="heading">
@@ -26,11 +26,11 @@
 
             <x-slot name="afterHeader">
                 @if ($active)
-                    <x-filament::badge color="warning" icon="heroicon-m-clock">
+                    <x-filament::badge color="warning" :icon="\Filament\Support\Icons\Heroicon::Clock">
                         SEDANG MELAYANI
                     </x-filament::badge>
                 @else
-                    <x-filament::badge color="success" icon="heroicon-m-check-circle">
+                    <x-filament::badge color="success" :icon="\Filament\Support\Icons\Heroicon::CheckCircle">
                         SIAP MELAYANI
                     </x-filament::badge>
                 @endif
@@ -39,7 +39,7 @@
             @if ($isAdmin)
                 <div class="mb-4 pb-3 border-b border-gray-100 dark:border-gray-800">
                     <label class="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1.5">
-                        Pilih Loket Operasional (Mode Administrator)
+                        Pilih loket layanan
                     </label>
                     <x-filament::input.wrapper>
                         <x-filament::input.select wire:model.live="selectedSettingId">
@@ -57,11 +57,11 @@
                     <div class="text-xs font-extrabold uppercase tracking-widest text-[#004B9C] dark:text-blue-400 mb-1">
                         NOMOR ANTREAN SAAT INI
                     </div>
-                    <div class="text-6xl font-black tracking-wider text-[#002B49] dark:text-white my-1">
+                    <div class="bank-operator-number font-bold tracking-wider text-[#002B49] dark:text-white my-1">
                         {{ $active->number }}
                     </div>
                     <div class="mt-2 text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center justify-center gap-2">
-                        <span>🕒 {{ $active->called_at ? \Carbon\Carbon::parse($active->called_at)->format('H:i') . ' WIB' : '-' }}</span>
+                        <span> {{ $active->called_at ? \Carbon\Carbon::parse($active->called_at)->format('H:i') . ' WIB' : '-' }}</span>
                         <span>•</span>
                         <span>Status: <strong class="text-amber-600 dark:text-amber-400 uppercase font-bold">{{ $active->status->getLabel() }}</strong></span>
                     </div>
@@ -69,7 +69,7 @@
                     <div class="text-xs font-extrabold uppercase tracking-widest text-gray-600 dark:text-gray-300 mb-1">
                         ANTREAN BERIKUTNYA SIAP DIPANGGIL
                     </div>
-                    <div class="text-6xl font-black tracking-wider text-[#004B9C] dark:text-blue-400 my-1">
+                    <div class="bank-operator-number font-bold tracking-wider text-[#004B9C] dark:text-blue-400 my-1">
                         {{ $next->number }}
                     </div>
                     <div class="mt-2 text-xs font-medium text-gray-500 dark:text-gray-400">
@@ -83,7 +83,7 @@
                         BELUM ADA ANTREAN
                     </div>
                     <div class="text-xs text-gray-500 dark:text-gray-400">
-                        Semua nasabah telah selesai dilayani
+                        Belum ada nasabah yang menunggu.
                     </div>
                 @endif
             </div>
@@ -107,7 +107,7 @@
                         <div class="grid grid-cols-2 gap-2.5">
                             <x-filament::button
                                 color="warning"
-                                icon="heroicon-m-speaker-wave"
+                                :icon="\Filament\Support\Icons\Heroicon::SpeakerWave"
                                 wire:click="recallActiveQueue"
                                 size="lg"
                                 class="w-full"
@@ -117,7 +117,7 @@
 
                             <x-filament::button
                                 color="success"
-                                icon="heroicon-m-check"
+                                :icon="\Filament\Support\Icons\Heroicon::Check"
                                 wire:click="completeActiveQueue"
                                 size="lg"
                                 class="w-full"
@@ -128,14 +128,14 @@
 
                         <x-filament::button
                             color="danger"
-                            icon="heroicon-m-forward"
+                            :icon="\Filament\Support\Icons\Heroicon::Forward"
                             wire:click="skipActiveQueue"
                             wire:confirm="Yakin ingin melewati nomor antrean {{ $active->number }}?"
                             outlined
                             size="sm"
                             class="w-full"
                         >
-                            Lewati Antrean (Nasabah Tidak Hadir)
+                            Lewati Antrean
                         </x-filament::button>
                     </div>
                 @else
@@ -143,17 +143,17 @@
                         @if ($next)
                             <x-filament::button
                                 color="primary"
-                                icon="heroicon-m-bell-alert"
+                                :icon="\Filament\Support\Icons\Heroicon::BellAlert"
                                 wire:click="callNextQueue"
                                 size="xl"
                                 class="w-full py-4 text-base font-black shadow-md"
                             >
-                                PANGGIL ANTREAN BERIKUTNYA ({{ $next->number }})
+                                Panggil Antrean Berikutnya ({{ $next->number }})
                             </x-filament::button>
                         @else
                             <x-filament::button
                                 color="gray"
-                                icon="heroicon-m-clock"
+                                :icon="\Filament\Support\Icons\Heroicon::Clock"
                                 disabled
                                 size="lg"
                                 class="w-full"

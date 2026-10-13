@@ -1,12 +1,13 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\QueueController;
 use App\Http\Controllers\DisplayController;
-use App\Http\Controllers\AdminAuthController;
-use App\Http\Controllers\AdminUserController;
-use App\Http\Controllers\RoleController;
 use App\Http\Controllers\LoketController;
+use App\Http\Controllers\QueueController;
+use App\Http\Controllers\RoleController;
+use App\Models\User;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Route;
+use STS\FilamentImpersonate\Facades\Impersonation;
 
 Route::get('/', function () {
     return redirect('/ambil-nomor');
@@ -17,17 +18,19 @@ Route::get('/login', function () {
     return redirect('/admin/login');
 })->name('login');
 
-Route::any('/admin/logout-custom', function () {
-    \Illuminate\Support\Facades\Auth::logout();
+Route::post('/admin/logout-custom', function () {
+    Auth::logout();
     session()->invalidate();
     session()->regenerateToken();
+
     return redirect('/admin/login');
 })->name('custom.admin.logout');
 
-Route::any('/logout', function () {
-    \Illuminate\Support\Facades\Auth::logout();
+Route::post('/logout', function () {
+    Auth::logout();
     session()->invalidate();
     session()->regenerateToken();
+
     return redirect('/admin/login');
 })->name('logout');
 
@@ -45,14 +48,14 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/admin/api/lokets', [LoketController::class, 'storeApi'])->name('admin.api.lokets.store');
 
     // Impersonation Routes using official STS Impersonation
-    Route::get('/admin/impersonate/{user}', function (\App\Models\User $user) {
+    Route::get('/admin/impersonate/{user}', function (User $user) {
         $currentUser = auth()->user();
-        if (! $currentUser?->hasRole('admin') && ! \STS\FilamentImpersonate\Facades\Impersonation::isImpersonating()) {
+        if (! $currentUser?->hasRole('admin') && ! Impersonation::isImpersonating()) {
             abort(403, 'Hanya Administrator yang dapat melakukan impersonate.');
         }
 
         session()->put('impersonate.back_to', route('filament.admin.pages.admin-control-center'));
-        \STS\FilamentImpersonate\Facades\Impersonation::enter($currentUser, $user);
+        Impersonation::enter($currentUser, $user);
 
         return redirect()->route('filament.admin.resources.queues.index');
     })->name('admin.impersonate');
@@ -72,7 +75,7 @@ Route::get('/display/{branch?}', [DisplayController::class, 'index'])->name('dis
 Route::get('/api/display/data/{branch?}', [DisplayController::class, 'getDisplayData'])->name('api.display.data');
 Route::get('/ambil-nomor/{branch?}', [QueueController::class, 'takeNumber'])->name('queue.take-number');
 Route::post('/ambil-nomor/{branch?}', [QueueController::class, 'storeNumber'])->name('queue.store-number');
-Route::get('/verifikasi/{number}', [QueueController::class, 'verifyTicket'])->name('queue.verify');
+Route::get('/verifikasi/{queueId}', [QueueController::class, 'verifyTicket'])->whereNumber('queueId')->name('queue.verify');
 
 // Officer Consoles -> Filament Queue Resource
 Route::middleware(['auth', 'role:cs'])->group(function () {

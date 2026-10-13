@@ -5,42 +5,32 @@ namespace App\Http\Controllers;
 use App\Enums\QueueStatus;
 use App\Models\Branch;
 use App\Models\Queue;
+use App\Models\Scopes\ServiceSettingScope;
 use App\Models\ServiceSetting;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\View\View;
 
 class DisplayController extends Controller
 {
     protected function resolveBranch(Request $request, ?string $branchIdentifier = null): Branch
     {
-        if ($branchIdentifier) {
-            $branch = Branch::query()
-                ->where('code', $branchIdentifier)
-                ->orWhere('slug', $branchIdentifier)
-                ->orWhere('id', $branchIdentifier)
-                ->first();
-            if ($branch) return $branch;
+        $identifier = $branchIdentifier ?? $request->query('branch') ?? $request->query('cabang');
+        if ($identifier !== null) {
+            abort_unless(is_string($identifier) && $identifier !== '', 404);
+
+            return Branch::where('is_active', true)
+                ->where(fn ($query) => $query->where('code', $identifier)->orWhere('slug', $identifier))
+                ->firstOrFail();
         }
 
-        $param = $request->query('branch') ?? $request->query('cabang');
-        if ($param) {
-            $branch = Branch::query()
-                ->where('code', $param)
-                ->orWhere('slug', $param)
-                ->orWhere('id', $param)
-                ->first();
-            if ($branch) return $branch;
+        if (auth()->user()?->branch_id) {
+            return Branch::where('is_active', true)->findOrFail(auth()->user()->branch_id);
         }
 
-        if (auth()->check() && auth()->user()->branch_id) {
-            $branch = auth()->user()->branch;
-            if ($branch) return $branch;
-        }
-
-        return Branch::query()->where('code', '001')->first() 
-            ?? Branch::query()->where('is_active', true)->first() 
-            ?? Branch::first();
+        return Branch::where('is_active', true)->where('code', '001')->first()
+            ?? Branch::where('is_active', true)->orderBy('code')->firstOrFail();
     }
 
     public function index(Request $request, ?string $branch = null): View
@@ -87,7 +77,7 @@ class DisplayController extends Controller
         $umumIds = $allSettings->where('service', 'umum')->pluck('id')->toArray();
 
         $baseQueueQuery = fn () => Queue::query()
-            ->withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class)
+            ->withoutGlobalScope(ServiceSettingScope::class)
             ->when($branchId, fn ($q) => $q->where('branch_id', $branchId));
 
         $csWaitCount = empty($csIds) ? 0 : $baseQueueQuery()
@@ -191,6 +181,7 @@ class DisplayController extends Controller
             ->get()
             ->map(function ($q) {
                 $parts = explode('-', $q->number);
+
                 return (int) end($parts);
             })
             ->max() ?? 0);
@@ -203,6 +194,7 @@ class DisplayController extends Controller
             ->get()
             ->map(function ($q) {
                 $parts = explode('-', $q->number);
+
                 return (int) end($parts);
             })
             ->max() ?? 0);
@@ -257,7 +249,7 @@ class DisplayController extends Controller
         ];
     }
 
-    private function formatQueueData(?\Illuminate\Support\Collection $queues, string $defaultCounterName): ?array
+    private function formatQueueData(?Collection $queues, string $defaultCounterName): ?array
     {
         if (! $queues || $queues->isEmpty()) {
             return null;

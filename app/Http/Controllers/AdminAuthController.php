@@ -2,7 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\LoginRequest;
+use App\Models\User;
+use App\Services\NotificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -16,13 +17,9 @@ class AdminAuthController extends Controller
     /**
      * Display the admin login view.
      */
-    public function showLoginForm(): View|RedirectResponse
+    public function showLoginForm(): RedirectResponse
     {
-        if (Auth::check()) {
-            return redirect()->intended('/admin/queues');
-        }
-
-        return view('admin.auth.login');
+        return redirect(auth()->check() ? '/admin' : '/admin/login');
     }
 
     /**
@@ -30,17 +27,17 @@ class AdminAuthController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
-        $email = $request->input('email') 
-            ?? $request->input('data.email') 
+        $email = $request->input('email')
+            ?? $request->input('data.email')
             ?? data_get($request->all(), 'data.email')
             ?? data_get($request->all(), 'email');
 
-        $password = $request->input('password') 
-            ?? $request->input('data.password') 
+        $password = $request->input('password')
+            ?? $request->input('data.password')
             ?? data_get($request->all(), 'data.password')
             ?? data_get($request->all(), 'password');
 
-        $throttleKey = Str::transliterate(Str::lower((string) $email) . '|' . $request->ip());
+        $throttleKey = Str::transliterate(Str::lower((string) $email).'|'.$request->ip());
 
         // Check if user is rate limited (Max 5 attempts per 60 seconds)
         if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
@@ -48,7 +45,7 @@ class AdminAuthController extends Controller
 
             Log::warning("Banking Security Alert: Brute force attempt blocked for email '{$email}' from IP {$request->ip()}. Locked for {$seconds}s.");
 
-            \App\Services\NotificationService::sendSecurityAlertNotification((string) $email, $request->ip(), $seconds);
+            NotificationService::sendSecurityAlertNotification((string) $email, $request->ip(), $seconds);
 
             return back()
                 ->withInput($request->only('email', 'remember'))
@@ -57,7 +54,7 @@ class AdminAuthController extends Controller
                 ]);
         }
 
-        $existingUser = \App\Models\User::where('email', $email)->first();
+        $existingUser = User::where('email', $email)->first();
         if ($existingUser && ! $existingUser->is_active) {
             Log::warning("Banking Security Alert: Inactive user attempt login for User #{$existingUser->id} ({$existingUser->email}).");
 
@@ -80,7 +77,7 @@ class AdminAuthController extends Controller
         if (Auth::attempt($credentials, $remember)) {
             $user = Auth::user();
 
-            if (!$user->is_active) {
+            if (! $user->is_active) {
                 Auth::logout();
                 $request->session()->invalidate();
                 $request->session()->regenerateToken();

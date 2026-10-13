@@ -9,5 +9,9 @@ use Filament\Resources\Pages\ManageRecords;
 class ManageServiceSettings extends ManageRecords
 {
     protected static string $resource = ServiceSettingResource::class;
-    protected function getHeaderActions(): array { return [CreateAction::make()->label('Tambah counter')]; }
+
+    protected function getHeaderActions(): array
+    {
+        return [CreateAction::make()->label('Tambah counter')];
+    }
 }

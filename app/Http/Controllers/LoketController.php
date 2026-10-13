@@ -3,24 +3,26 @@
 namespace App\Http\Controllers;
 
 use App\Models\ServiceSetting;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
-use Illuminate\View\View;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class LoketController extends Controller
 {
     /**
      * Display a listing of service counter desks.
      */
-    public function index(): View
+    public function index(): RedirectResponse
     {
-        abort_if(!auth()->user()->can('view_any_service_setting'), 403);
+        abort_unless(auth()->user()?->can('view_any_service_setting'), 403);
 
-        $lokets = ServiceSetting::withCount('users')->orderBy('service')->get();
-        return view('admin.lokets.index', compact('lokets'));
+        return redirect('/admin/service-settings');
     }
 
     /**
@@ -28,16 +30,20 @@ class LoketController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
-        abort_if(!auth()->user()->can('edit_service_setting'), 403);
+        abort_if(! auth()->user()->can('edit_service_setting'), 403);
 
+        $request->merge(['branch_id' => $request->input('branch_id') ?? auth()->user()->branch_id]);
         $validated = $request->validate([
+            'branch_id' => ['required', 'integer', 'exists:branches,id'],
             'counter_name' => ['required', 'string', 'max:255', 'unique:service_settings,counter_name'],
             'service' => ['required', 'string', 'max:255'],
             'label' => ['nullable', 'string', 'max:255'],
             'is_active' => ['nullable', 'boolean'],
         ]);
 
+        abort_if(! auth()->user()->hasRole('admin') && (int) $validated['branch_id'] !== (int) auth()->user()->branch_id, 403);
         $loket = ServiceSetting::create([
+            'branch_id' => $validated['branch_id'],
             'counter_name' => $validated['counter_name'],
             'service' => $validated['service'],
             'label' => $validated['label'] ?? ($validated['service'] === 'cs' ? 'Layanan CS' : 'Layanan Teller'),
@@ -54,10 +60,12 @@ class LoketController extends Controller
      */
     public function storeApi(Request $request): JsonResponse
     {
-        abort_if(!auth()->user()->can('edit_service_setting'), 403);
+        abort_if(! auth()->user()->can('edit_service_setting'), 403);
 
         try {
+            $request->merge(['branch_id' => $request->input('branch_id') ?? auth()->user()->branch_id]);
             $validated = $request->validate([
+                'branch_id' => ['required', 'integer', 'exists:branches,id'],
                 'counter_name' => ['required', 'string', 'max:255', 'unique:service_settings,counter_name'],
                 'service' => ['required', 'string', 'max:255'],
                 'label' => ['nullable', 'string', 'max:255'],
@@ -66,7 +74,9 @@ class LoketController extends Controller
 
             $label = $validated['label'] ?? ($validated['service'] === 'cs' ? 'Layanan Customer Service' : 'Layanan Teller');
 
+            abort_if(! auth()->user()->hasRole('admin') && (int) $validated['branch_id'] !== (int) auth()->user()->branch_id, 403);
             $loket = ServiceSetting::create([
+                'branch_id' => $validated['branch_id'],
                 'counter_name' => $validated['counter_name'],
                 'service' => $validated['service'],
                 'label' => $label,
@@ -84,15 +94,17 @@ class LoketController extends Controller
                     'service_name' => "{$label} ({$loket->counter_name})",
                 ],
             ]);
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Validasi gagal: ' . implode(', ', \Illuminate\Support\Arr::flatten($e->errors())),
+                'message' => 'Validasi gagal: '.implode(', ', Arr::flatten($e->errors())),
             ], 422);
+        } catch (HttpException $e) {
+            throw $e;
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Terjadi kesalahan sistem: ' . $e->getMessage(),
+                'message' => 'Terjadi kesalahan sistem: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -103,8 +115,8 @@ class LoketController extends Controller
     public function update(Request $request, ServiceSetting $loket): RedirectResponse
     {
         $user = auth()->user();
-        abort_if(!$user->can('edit_service_setting'), 403);
-        if (!$user->hasRole('admin') && $loket->id !== $user->service_setting_id) {
+        abort_if(! $user->can('edit_service_setting'), 403);
+        if (! $user->hasRole('admin') && $loket->id !== $user->service_setting_id) {
             abort(403, 'Anda tidak memiliki hak untuk mengubah loket yang bukan milik Anda.');
         }
 
@@ -127,12 +139,12 @@ class LoketController extends Controller
     public function toggleStatus(ServiceSetting $loket): RedirectResponse
     {
         $user = auth()->user();
-        abort_if(!$user->can('edit_service_setting'), 403);
-        if (!$user->hasRole('admin') && $loket->id !== $user->service_setting_id) {
+        abort_if(! $user->can('edit_service_setting'), 403);
+        if (! $user->hasRole('admin') && $loket->id !== $user->service_setting_id) {
             abort(403, 'Anda tidak memiliki hak untuk mengubah status loket yang bukan milik Anda.');
         }
 
-        $loket->is_active = !$loket->is_active;
+        $loket->is_active = ! $loket->is_active;
         $loket->save();
 
         $statusText = $loket->is_active ? 'diaktifkan' : 'dinonaktifkan';
@@ -147,15 +159,15 @@ class LoketController extends Controller
     public function destroy(ServiceSetting $loket): RedirectResponse
     {
         $user = auth()->user();
-        abort_if(!$user->can('edit_service_setting'), 403);
-        if (!$user->hasRole('admin') && $loket->id !== $user->service_setting_id) {
+        abort_if(! $user->can('edit_service_setting'), 403);
+        if (! $user->hasRole('admin') && $loket->id !== $user->service_setting_id) {
             abort(403, 'Anda tidak memiliki hak untuk menghapus loket yang bukan milik Anda.');
         }
 
         $counterName = $loket->counter_name;
 
         // Unassign users from this counter desk before deleting
-        \App\Models\User::where('service_setting_id', $loket->id)->update(['service_setting_id' => null]);
+        User::where('service_setting_id', $loket->id)->update(['service_setting_id' => null]);
 
         $loket->delete();
 

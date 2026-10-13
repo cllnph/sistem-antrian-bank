@@ -2,14 +2,12 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\ServiceSetting;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
-use Illuminate\View\View;
 use Spatie\Permission\Models\Role;
 
 class AdminUserController extends Controller
@@ -17,50 +15,11 @@ class AdminUserController extends Controller
     /**
      * Display a listing of the users with search, role, status, and date filtering.
      */
-    public function index(Request $request): View
+    public function index(Request $request): RedirectResponse
     {
-        abort_if(!auth()->user()->can('view_any_user'), 403);
+        abort_unless(auth()->user()?->can('view_any_user'), 403);
 
-        $query = User::query()->with(['serviceSetting', 'roles']);
-
-        // Search Filter (Name or Email)
-        if ($request->filled('search')) {
-            $search = trim($request->input('search'));
-            $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%");
-            });
-        }
-
-        // Role Filter
-        if ($request->filled('role')) {
-            $role = $request->input('role');
-            $query->role($role);
-        }
-
-        // Status Filter (active / inactive)
-        if ($request->filled('status')) {
-            $status = $request->input('status');
-            if ($status === 'active') {
-                $query->where('is_active', true);
-            } elseif ($status === 'inactive') {
-                $query->where('is_active', false);
-            }
-        }
-
-        // Date Range Filter
-        if ($request->filled('date_from')) {
-            $query->whereDate('created_at', '>=', $request->input('date_from'));
-        }
-        if ($request->filled('date_to')) {
-            $query->whereDate('created_at', '<=', $request->input('date_to'));
-        }
-
-        $users = $query->orderBy('created_at', 'desc')->paginate(10)->withQueryString();
-        $serviceSettings = ServiceSetting::all();
-        $roles = Role::all();
-
-        return view('admin.users.index', compact('users', 'serviceSettings', 'roles'));
+        return redirect('/admin/users');
     }
 
     /**
@@ -68,7 +27,7 @@ class AdminUserController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
-        abort_if(!auth()->user()->can('create_user'), 403);
+        abort_if(! auth()->user()->can('create_user'), 403);
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -99,7 +58,7 @@ class AdminUserController extends Controller
      */
     public function update(Request $request, User $user): RedirectResponse
     {
-        abort_if(!auth()->user()->can('edit_user'), 403);
+        abort_if(! auth()->user()->can('edit_user'), 403);
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -115,7 +74,7 @@ class AdminUserController extends Controller
             'service_setting_id' => $validated['service_setting_id'] ?? null,
         ];
 
-        if (!empty($validated['password'])) {
+        if (! empty($validated['password'])) {
             $updateData['password'] = Hash::make($validated['password']);
         }
 
@@ -134,9 +93,9 @@ class AdminUserController extends Controller
      */
     public function toggleStatus(User $user): RedirectResponse
     {
-        abort_if(!auth()->user()->can('edit_user'), 403);
+        abort_if(! auth()->user()->can('edit_user'), 403);
 
-        $user->is_active = !$user->is_active;
+        $user->is_active = ! $user->is_active;
         $user->save();
 
         $statusLabel = $user->is_active ? 'diaktifkan' : 'dinonaktifkan';
@@ -150,7 +109,7 @@ class AdminUserController extends Controller
      */
     public function destroy(User $user): RedirectResponse
     {
-        abort_if(!auth()->user()->can('delete_user'), 403);
+        abort_if(! auth()->user()->can('delete_user'), 403);
 
         if ($user->id === auth()->id()) {
             return back()->with('error', 'Anda tidak dapat menghapus akun Anda sendiri.');

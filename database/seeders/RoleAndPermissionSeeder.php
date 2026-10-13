@@ -58,6 +58,8 @@ class RoleAndPermissionSeeder extends Seeder
         ]);
 
         // 3. Sync Existing Users in DB to Spatie Pivot Table (model_has_roles)
+        \App\Services\BranchAdminRole::ensure();
+
         $users = User::all();
         foreach ($users as $user) {
             $userRole = $user->getAttribute('role');

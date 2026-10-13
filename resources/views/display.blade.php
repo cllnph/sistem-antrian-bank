@@ -142,7 +142,8 @@
             position: relative;
             z-index: 10;
             display: grid;
-            grid-template-columns: 1fr auto 1fr;
+            grid-template-columns: minmax(280px, 1fr) minmax(0, auto) minmax(280px, 1fr);
+            column-gap: 16px;
             align-items: center;
             padding: 12px 36px;
             background: rgba(255, 255, 255, 0.96);
@@ -196,14 +197,14 @@
         }
         .display-header-title {
             font-family: 'Inter', sans-serif;
-            font-size: clamp(18px, 1.8vw, 25px);
+            font-size: clamp(26px, 2.5vw, 36px);
             font-weight: 900;
             color: #002B49;
-            letter-spacing: -0.2px;
+            letter-spacing: -0.6px;
             margin: 0;
-            line-height: 1.2;
+            line-height: 1.15;
             text-transform: uppercase;
-            white-space: nowrap;
+            white-space: normal;
         }
 
         .header-meta {
@@ -581,7 +582,7 @@
                 width: 100%;
             }
             .display-header-title {
-                font-size: 20px;
+                font-size: clamp(24px, 3.2vw, 30px);
                 text-align: center;
             }
             .header-meta {
@@ -639,7 +640,7 @@
                 gap: 10px;
             }
             .display-header-title {
-                font-size: 16px;
+                font-size: clamp(22px, 5vw, 28px);
                 white-space: normal;
                 text-align: center;
                 line-height: 1.25;
@@ -743,6 +744,7 @@
             }
         }
     </style>
+    <link rel="stylesheet" href="{{ asset('css/bank-ui.css') }}?v=20261012">
 </head>
 <body>
     <!-- Blade Heroicon Templates for Dynamic Components (No Hardcoded SVG / Emojis) -->
@@ -793,23 +795,13 @@
             <div class="brand-logo-wrap">
                 @include('components.bank-logo', ['height' => '40px'])
             </div>
-            <div class="brand-info">
-                <span class="brand-slogan-badge">#Mudah dan Nyaman</span>
-            </div>
         </div>
 
         <div class="header-center-title">
             <h1 class="display-header-title">INFORMASI PEMANGGILAN ANTREAN</h1>
-            <div style="font-size: 13px; font-weight: 700; color: #F3B313; margin-top: 2px; letter-spacing: 0.5px;">PT BPR DP TASPEN</div>
         </div>
 
         <div class="header-meta">
-            <!-- Network Connection Indicator -->
-            <div id="connectionStatusBadge" style="display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; padding: 5px 12px; border-radius: 20px; background: rgba(16, 185, 129, 0.18); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4); backdrop-filter: blur(8px);">
-                <span id="connectionDot" style="width: 8px; height: 8px; border-radius: 50%; background: #10b981; display: inline-block;"></span>
-                <span id="connectionStatusText">Online</span>
-            </div>
-
             <!-- Audio Call Toggle with Heroicon (Icon Only) -->
             <button type="button" id="audioToggleBtn" class="audio-toggle active" onclick="toggleAudio()" title="Suara Panggilan Aktif (Klik untuk bisukan)">
                 <span id="audioIconHolder" style="display: inline-flex; align-items: center; justify-content: center;">
@@ -824,12 +816,6 @@
             </div>
         </div>
     </header>
-
-    <!-- Audio Activation Notice for Browser Autoplay Safety -->
-    <div id="audioUnmuteBanner" onclick="dismissAudioBanner()" style="display: none; position: fixed; top: 22px; left: 50%; transform: translateX(-50%); z-index: 9999; background: rgba(243, 179, 19, 0.96); color: #002B49; font-weight: 800; font-size: 13.5px; padding: 10px 24px; border-radius: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); cursor: pointer; align-items: center; gap: 8px; backdrop-filter: blur(10px); transition: all 0.3s ease;">
-        <x-heroicon-o-speaker-wave style="width: 20px; height: 20px;" />
-        <span>Klik layar sekali untuk memastikan suara panggilan aktif 🔊</span>
-    </div>
 
     <!-- Main Content Area: Cards Grid -->
     <main class="display-container">
@@ -927,12 +913,6 @@
         setInterval(updateClock, 1000);
         updateClock();
 
-        function dismissAudioBanner() {
-            initAudioContext();
-            const banner = document.getElementById('audioUnmuteBanner');
-            if (banner) banner.style.display = 'none';
-        }
-
         function initAudioContext() {
             if (!audioContext) {
                 try {
@@ -942,19 +922,8 @@
             if (audioContext && audioContext.state === 'suspended') {
                 audioContext.resume();
             }
-            const banner = document.getElementById('audioUnmuteBanner');
-            if (banner) banner.style.display = 'none';
         }
         document.addEventListener('click', initAudioContext, { once: true });
-
-        setTimeout(() => {
-            try {
-                if (!audioContext || audioContext.state === 'suspended') {
-                    const banner = document.getElementById('audioUnmuteBanner');
-                    if (banner) banner.style.display = 'inline-flex';
-                }
-            } catch(e) {}
-        }, 1200);
 
         function toggleAudio() {
             initAudioContext();
@@ -1118,26 +1087,6 @@
             }
         }
 
-        function updateConnectionStatus(isOnline) {
-            const badge = document.getElementById('connectionStatusBadge');
-            const dot = document.getElementById('connectionDot');
-            const text = document.getElementById('connectionStatusText');
-            if (!badge || !dot || !text) return;
-            if (isOnline) {
-                badge.style.background = 'rgba(16, 185, 129, 0.18)';
-                badge.style.borderColor = 'rgba(16, 185, 129, 0.4)';
-                badge.style.color = '#10b981';
-                dot.style.background = '#10b981';
-                text.textContent = 'Online';
-            } else {
-                badge.style.background = 'rgba(239, 68, 68, 0.25)';
-                badge.style.borderColor = 'rgba(239, 68, 68, 0.5)';
-                badge.style.color = '#f87171';
-                dot.style.background = '#ef4444';
-                text.textContent = 'Koneksi Terputus';
-            }
-        }
-
         let isFetching = false;
         async function refreshData() {
             if (isFetching) return;
@@ -1147,7 +1096,6 @@
                 const response = await fetch("{{ url('/api/display/data/' . $branch->code) }}");
                 if (!response.ok) throw new Error("HTTP error " + response.status);
                 const data = await response.json();
-                updateConnectionStatus(true);
 
                 const grid = document.getElementById('displayGrid');
                 if (!grid) return;
@@ -1243,7 +1191,6 @@
                 isInitialLoad = false;
             } catch(e) {
                 console.error('Fetch error:', e);
-                updateConnectionStatus(false);
             } finally {
                 isFetching = false;
             }

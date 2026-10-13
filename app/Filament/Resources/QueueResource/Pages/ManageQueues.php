@@ -8,6 +8,7 @@ use Filament\Actions\CreateAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ManageRecords;
 use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
 
 class ManageQueues extends ManageRecords
@@ -18,9 +19,9 @@ class ManageQueues extends ManageRecords
     {
         return [
             Action::make('toggleCounterStatus')
-                ->label(fn () => auth()->user()?->serviceSetting?->is_active ? '🟢 Loket Aktif (Klik untuk Istirahat)' : '🔴 Loket Tutup (Klik untuk Buka Loket)')
+                ->label(fn () => auth()->user()?->serviceSetting?->is_active ? 'Tutup Loket' : 'Buka Loket')
                 ->color(fn () => auth()->user()?->serviceSetting?->is_active ? 'success' : 'danger')
-                ->icon(fn () => auth()->user()?->serviceSetting?->is_active ? 'heroicon-o-lock-open' : 'heroicon-o-lock-closed')
+                ->icon(fn () => auth()->user()?->serviceSetting?->is_active ? Heroicon::OutlinedLockOpen : Heroicon::OutlinedLockClosed)
                 ->requiresConfirmation()
                 ->modalHeading(fn () => auth()->user()?->serviceSetting?->is_active ? 'Tutup Loket Sementara?' : 'Buka Loket Layanan?')
                 ->modalDescription(fn () => auth()->user()?->serviceSetting?->is_active ? 'Layanan loket Anda di Kiosk akan dinonaktifkan sementara (misal jam istirahat siang).' : 'Layanan loket Anda di Kiosk akan diaktifkan untuk melayani nasabah.')
@@ -31,7 +32,7 @@ class ManageQueues extends ManageRecords
                         $user->serviceSetting->update(['is_active' => $newStatus]);
                         Notification::make()
                             ->title($newStatus ? 'Loket Berhasil Dibuka' : 'Loket Ditutup / Istirahat')
-                            ->body('Status loket telah diperbarui secara real-time di Kiosk dan TV Display.')
+                            ->body('Status loket telah diperbarui di kiosk dan layar antrean.')
                             ->color($newStatus ? 'success' : 'warning')
                             ->send();
                     }
@@ -53,18 +54,18 @@ class ManageQueues extends ManageRecords
 
         return [
             'all' => Tab::make('Semua Riwayat')
-                ->icon('heroicon-o-list-bullet'),
+                ->icon(Heroicon::OutlinedListBullet),
             'waiting' => Tab::make('Sedang Menunggu')
-                ->icon('heroicon-o-clock')
+                ->icon(Heroicon::OutlinedClock)
                 ->modifyQueryUsing(fn (Builder $query) => $query->where('status', 'waiting')),
             'called' => Tab::make('Sedang Dipanggil')
-                ->icon('heroicon-o-megaphone')
+                ->icon(Heroicon::OutlinedMegaphone)
                 ->modifyQueryUsing(fn (Builder $query) => $query->where('status', 'called')),
             'completed' => Tab::make('Selesai Dilayani')
-                ->icon('heroicon-o-check-circle')
+                ->icon(Heroicon::OutlinedCheckCircle)
                 ->modifyQueryUsing(fn (Builder $query) => $query->where('status', 'completed')),
             'skipped' => Tab::make('Dilewati')
-                ->icon('heroicon-o-x-circle')
+                ->icon(Heroicon::OutlinedXCircle)
                 ->modifyQueryUsing(fn (Builder $query) => $query->where('status', 'skipped')),
         ];
     }

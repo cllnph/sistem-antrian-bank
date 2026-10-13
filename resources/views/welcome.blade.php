@@ -23,7 +23,8 @@
                 -webkit-font-smoothing: antialiased;
             }
         </style>
-    </head>
+        <link rel="stylesheet" href="{{ asset('css/bank-ui.css') }}?v=20261012">
+</head>
     <body class="bg-gradient-to-br from-[#1e3a8a] via-[#0f2b5c] to-[#040d1a] text-slate-100 flex p-6 lg:p-8 items-center lg:justify-center min-h-screen flex-col font-sans">
         <header class="w-full lg:max-w-4xl max-w-[335px] text-sm mb-6 flex items-center justify-between">
             <div class="bg-white p-3 px-6 rounded-2xl border border-slate-200 shadow-md">

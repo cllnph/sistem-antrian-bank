@@ -10,43 +10,80 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class ServiceSettingResource extends Resource
 {
     protected static ?string $model = ServiceSetting::class;
-    protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-cog-6-tooth';
+
+    protected static \BackedEnum|string|null $navigationIcon = Heroicon::OutlinedCog6Tooth;
+
     protected static ?string $recordTitleAttribute = 'counter_name';
+
     protected static ?int $navigationSort = 2;
 
-    public static function getNavigationGroup(): ?string { return __('app.nav_group_org'); }
-    public static function getNavigationLabel(): string { return __('app.service_settings'); }
-    public static function getModelLabel(): string { return __('app.counter'); }
-    public static function getPluralModelLabel(): string { return __('app.service_settings'); }
+    public static function getNavigationGroup(): ?string
+    {
+        return __('app.nav_group_org');
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __('app.service_settings');
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __('app.counter');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('app.service_settings');
+    }
 
     public static function getGloballySearchableAttributes(): array
     {
         return ['counter_name', 'label', 'service'];
     }
 
-    public static function canViewAny(): bool { return auth()->user()?->can('view_any_service_setting') ?? false; }
-    public static function canCreate(): bool { return auth()->user()?->can('edit_service_setting') ?? false; }
-    public static function canEdit($record): bool { return auth()->user()?->can('edit_service_setting') ?? false; }
-    public static function canDelete($record): bool { return auth()->user()?->can('edit_service_setting') ?? false; }
+    public static function canViewAny(): bool
+    {
+        return auth()->user()?->can('view_any_service_setting') ?? false;
+    }
+
+    public static function canCreate(): bool
+    {
+        return auth()->user()?->can('edit_service_setting') ?? false;
+    }
+
+    public static function canEdit($record): bool
+    {
+        return auth()->user()?->can('update', $record) ?? false;
+    }
+
+    public static function canDelete($record): bool
+    {
+        return auth()->user()?->can('delete', $record) ?? false;
+    }
 
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            \Filament\Schemas\Components\Section::make('Konfigurasi Loket Layanan')
+            Section::make('Konfigurasi Loket Layanan')
                 ->description('Pengaturan loket tugas teller dan CS per kantor cabang.')
                 ->schema([
                     Select::make('branch_id')
                         ->label('Kantor Cabang')
-                        ->relationship('branch', 'name')
+                        ->relationship('branch', 'name', modifyQueryUsing: fn (Builder $query) => $query->when(auth()->user()?->hasRole('admin_cabang'), fn (Builder $query) => $query->whereKey(auth()->user()->branch_id)))
+                        ->rules(fn () => auth()->user()?->hasRole('admin_cabang') ? [\Illuminate\Validation\Rule::in([auth()->user()->branch_id])] : [])
                         ->default(fn () => auth()->user()?->branch_id)
                         ->required(),
                     Select::make('service')
@@ -83,16 +120,16 @@ class ServiceSettingResource extends Resource
             TextColumn::make('counter_name')->label(fn () => __('app.counter_name')),
             IconColumn::make('is_active')->label(fn () => __('app.operational_status'))->boolean(),
         ])
-        ->filters([
-            SelectFilter::make('branch_id')
-                ->label('Filter Cabang')
-                ->relationship('branch', 'name')
-                ->visible($isAdmin),
-        ])
-        ->recordActions([EditAction::make(), DeleteAction::make()]);
+            ->filters([
+                SelectFilter::make('branch_id')
+                    ->label('Filter Cabang')
+                    ->relationship('branch', 'name')
+                    ->visible($isAdmin),
+            ])
+            ->recordActions([EditAction::make(), DeleteAction::make()]);
     }
 
-    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    public static function getEloquentQuery(): Builder
     {
         $query = parent::getEloquentQuery()->with('branch');
         $user = auth()->user();
@@ -112,5 +149,8 @@ class ServiceSettingResource extends Resource
         return $query;
     }
 
-    public static function getPages(): array { return ['index' => ManageServiceSettings::route('/')]; }
+    public static function getPages(): array
+    {
+        return ['index' => ManageServiceSettings::route('/')];
+    }
 }

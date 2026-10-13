@@ -3,23 +3,26 @@
 namespace App\Filament\Pages;
 
 use Filament\Pages\Dashboard as BaseDashboard;
+use Filament\Support\Icons\Heroicon;
+use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Http\RedirectResponse;
 use Livewire\Features\SupportRedirects\Redirector;
 
 class Dashboard extends BaseDashboard
 {
-    protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-home';
+    protected static \BackedEnum|string|null $navigationIcon = Heroicon::OutlinedHome;
+
     protected static ?int $navigationSort = -10;
 
     public function mount(): RedirectResponse|Redirector|null
     {
         $user = auth()->user();
 
-        if (! $user || ! $user->hasRole('admin')) {
+        if (! $user || ! $user->hasAnyRole(['admin', 'admin_cabang'])) {
             return redirect()->to('/admin/queues');
         }
 
-        return null;
+        return redirect()->to(BranchOperations::getUrl());
     }
 
     public static function getNavigationLabel(): string
@@ -27,15 +30,13 @@ class Dashboard extends BaseDashboard
         return __('app.dashboard');
     }
 
-    public function getTitle(): string|\Illuminate\Contracts\Support\Htmlable
+    public function getTitle(): string|Htmlable
     {
         return __('app.dashboard');
     }
 
     public static function shouldRegisterNavigation(): bool
     {
-        $user = auth()->user();
-
-        return (bool) ($user && $user->hasRole('admin'));
+        return false;
     }
 }

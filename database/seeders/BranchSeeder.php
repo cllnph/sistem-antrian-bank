@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\Branch;
+use App\Models\Queue;
 use App\Models\ServiceSetting;
 use App\Models\User;
 use Illuminate\Database\Seeder;
@@ -100,20 +101,25 @@ class BranchSeeder extends Seeder
         $csRole = Role::findOrCreate('cs');
 
         foreach ($branchesData as $bData) {
-            $branch = Branch::updateOrCreate(
+            $branch = Branch::firstOrCreate(
                 ['code' => $bData['code']],
                 $bData
             );
 
-            // Create or update default Service Settings for each branch
-            $csCounterName = $branch->code === '001' 
-                ? 'Loket CS - Kredit & Pensiun' 
-                : 'Loket CS ' . $branch->name;
-            $tellerCounterName = $branch->code === '001' 
-                ? 'Loket Teller - Kas & Pensiun' 
-                : 'Loket Teller ' . $branch->name;
+            // Adopt legacy counters before creating the defaults, preserving their IDs.
+            if ($branch->code === '001') {
+                ServiceSetting::whereNull('branch_id')->update(['branch_id' => $branch->id]);
+            }
 
-            $csSetting = ServiceSetting::updateOrCreate(
+            // Create missing default counters without reopening existing closed counters.
+            $csCounterName = $branch->code === '001'
+                ? 'Loket CS - Kredit & Pensiun'
+                : 'Loket CS '.$branch->name;
+            $tellerCounterName = $branch->code === '001'
+                ? 'Loket Teller - Kas & Pensiun'
+                : 'Loket Teller '.$branch->name;
+
+            $csSetting = ServiceSetting::firstOrCreate(
                 [
                     'branch_id' => $branch->id,
                     'service' => 'cs',
@@ -125,7 +131,7 @@ class BranchSeeder extends Seeder
                 ]
             );
 
-            $tellerSetting = ServiceSetting::updateOrCreate(
+            $tellerSetting = ServiceSetting::firstOrCreate(
                 [
                     'branch_id' => $branch->id,
                     'service' => 'teller',
@@ -137,11 +143,15 @@ class BranchSeeder extends Seeder
                 ]
             );
 
-            // Create operator accounts for testing each branch if not exists
+            if (! app()->environment(['local', 'testing'])) {
+                continue;
+            }
+
+            // Create demo operators only when the account does not exist.
             $branchSlug = $branch->slug;
 
             // Teller account
-            $tellerUser = User::updateOrCreate(
+            $tellerUser = User::firstOrCreate(
                 ['email' => "teller.{$branchSlug}@banktaspen.co.id"],
                 [
                     'name' => "Teller - {$branch->name}",
@@ -151,10 +161,12 @@ class BranchSeeder extends Seeder
                     'is_active' => true,
                 ]
             );
-            $tellerUser->syncRoles([$tellerRole]);
+            if ($tellerUser->wasRecentlyCreated) {
+                $tellerUser->syncRoles([$tellerRole]);
+            }
 
             // CS account
-            $csUser = User::updateOrCreate(
+            $csUser = User::firstOrCreate(
                 ['email' => "cs.{$branchSlug}@banktaspen.co.id"],
                 [
                     'name' => "CS - {$branch->name}",
@@ -164,15 +176,17 @@ class BranchSeeder extends Seeder
                     'is_active' => true,
                 ]
             );
-            $csUser->syncRoles([$csRole]);
+            if ($csUser->wasRecentlyCreated) {
+                $csUser->syncRoles([$csRole]);
+            }
         }
 
-        // Assign existing default users to Branch 001 (Kantor Pusat)
-        $pusat = Branch::where('code', '001')->first();
-        if ($pusat) {
-            User::whereNull('branch_id')->update(['branch_id' => $pusat->id]);
-            ServiceSetting::whereNull('branch_id')->update(['branch_id' => $pusat->id]);
-            \App\Models\Queue::whereNull('branch_id')->update(['branch_id' => $pusat->id]);
+        // Recover branch ownership from the assigned counter for legacy records.
+        foreach (ServiceSetting::whereNotNull('branch_id')->get() as $setting) {
+            User::whereNull('branch_id')->where('service_setting_id', $setting->id)
+                ->update(['branch_id' => $setting->branch_id]);
+            Queue::withoutGlobalScopes()->whereNull('branch_id')->where('service_setting_id', $setting->id)
+                ->update(['branch_id' => $setting->branch_id]);
         }
     }
 }

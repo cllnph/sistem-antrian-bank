@@ -20,7 +20,9 @@ class ServiceSettingPolicy
         if ($user->hasRole('admin')) {
             return true;
         }
-        return $user->service_setting_id === $setting->id;
+        return $user->hasRole('admin_cabang')
+            ? $user->branch_id !== null && $user->branch_id === $setting->branch_id
+            : $user->service_setting_id === $setting->id;
     }
 
     public function create(User $user): bool
@@ -36,7 +38,9 @@ class ServiceSettingPolicy
         if ($user->hasRole('admin')) {
             return true;
         }
-        return $user->service_setting_id === $setting->id;
+        return $user->hasRole('admin_cabang')
+            ? $user->branch_id !== null && $user->branch_id === $setting->branch_id
+            : $user->service_setting_id === $setting->id;
     }
 
     public function delete(User $user, ServiceSetting $setting): bool
@@ -47,6 +51,8 @@ class ServiceSettingPolicy
         if ($user->hasRole('admin')) {
             return true;
         }
-        return $user->service_setting_id === $setting->id;
+        return $user->hasRole('admin_cabang')
+            ? $user->branch_id !== null && $user->branch_id === $setting->branch_id
+            : $user->service_setting_id === $setting->id;
     }
 }

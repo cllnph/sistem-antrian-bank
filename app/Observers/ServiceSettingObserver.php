@@ -7,6 +7,17 @@ use App\Services\NotificationService;
 
 class ServiceSettingObserver
 {
+    public function saving(ServiceSetting $setting): void
+    {
+        $actor = auth()->user();
+        if ($actor?->hasRole('admin_cabang')) {
+            abort_unless($actor->branch_id && (int) $setting->branch_id === (int) $actor->branch_id, 403);
+            if ($setting->exists) {
+                abort_unless((int) $setting->getOriginal('branch_id') === (int) $actor->branch_id, 403);
+            }
+        }
+    }
+
     /**
      * Handle the ServiceSetting "created" event.
      */

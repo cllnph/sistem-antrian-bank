@@ -17,6 +17,7 @@ class KioskInstantTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->travelTo(\Carbon\Carbon::parse('2026-10-13 09:00:00', 'Asia/Jakarta'));
         $this->seed(RoleAndPermissionSeeder::class);
     }
 
@@ -50,8 +51,49 @@ class KioskInstantTest extends TestCase
         $response = $this->get('/ambil-nomor');
         $response->assertOk()
             ->assertSee('PENGAMBILAN TIKET ANTREAN')
-            ->assertSee('#Mudah dan Nyaman')
+            ->assertDontSee('#Mudah dan Nyaman')
             ->assertDontSee('<select onchange="window.location.href=this.value"', false);
+    }
+
+    #[Test]
+    public function kiosk_hours_apply_to_ticket_requests_and_numbers_restart_each_day(): void
+    {
+        $branch = Branch::create([
+            'code' => '002', 'slug' => 'bogor', 'name' => 'Bogor',
+            'type' => 'Kantor Cabang', 'is_active' => true,
+        ]);
+        ServiceSetting::create([
+            'branch_id' => $branch->id, 'label' => 'Teller', 'service' => 'teller',
+            'counter_name' => 'Loket Teller', 'is_active' => true,
+        ]);
+        $data = ['service' => 'teller', 'branch_id' => $branch->id];
+
+        $this->travelTo(\Carbon\Carbon::parse('2026-10-13 03:59:59', 'Asia/Jakarta'));
+        $this->postJson('/ambil-nomor?open=1', $data)->assertStatus(422);
+        $this->assertDatabaseCount('queues', 0);
+
+        $this->travelTo(\Carbon\Carbon::parse('2026-10-13 04:00:00', 'Asia/Jakarta'));
+        $this->get('/ambil-nomor/002')->assertOk()
+            ->assertSee('08.00 - 15.00 WIB')
+            ->assertDontSee('Pengambilan tiket dibuka Senin - Jumat');
+        $this->postJson('/ambil-nomor', $data)->assertOk()->assertJsonPath('ticket', 'T-001');
+
+        $this->travelTo(\Carbon\Carbon::parse('2026-10-13 17:59:59', 'Asia/Jakarta'));
+        $this->postJson('/ambil-nomor', $data)->assertOk()->assertJsonPath('ticket', 'T-002');
+
+        $this->travelTo(\Carbon\Carbon::parse('2026-10-13 18:00:00', 'Asia/Jakarta'));
+        $this->postJson('/ambil-nomor', $data)->assertStatus(422);
+
+        $this->travelTo(\Carbon\Carbon::parse('2026-10-14 00:00:00', 'Asia/Jakarta'));
+        $this->get('/ambil-nomor/002')->assertOk()->assertViewHas('nextTellerNumber', 'T-001');
+        $this->postJson('/ambil-nomor', $data)->assertStatus(422);
+
+        $this->travelTo(\Carbon\Carbon::parse('2026-10-14 04:00:00', 'Asia/Jakarta'));
+        $this->postJson('/ambil-nomor', $data)->assertOk()->assertJsonPath('ticket', 'T-001');
+        $this->assertDatabaseCount('queues', 3);
+
+        $this->travelTo(\Carbon\Carbon::parse('2026-10-17 09:00:00', 'Asia/Jakarta'));
+        $this->postJson('/ambil-nomor', $data)->assertStatus(422);
     }
 
     #[Test]

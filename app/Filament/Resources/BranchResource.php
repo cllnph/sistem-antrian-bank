@@ -12,7 +12,9 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -20,23 +22,55 @@ use Filament\Tables\Table;
 class BranchResource extends Resource
 {
     protected static ?string $model = Branch::class;
-    protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-building-office-2';
+
+    protected static \BackedEnum|string|null $navigationIcon = Heroicon::OutlinedBuildingOffice2;
+
     protected static ?int $navigationSort = 1;
 
-    public static function getNavigationGroup(): ?string { return __('app.nav_group_org'); }
-    public static function getNavigationLabel(): string { return 'Master Kantor Cabang'; }
-    public static function getModelLabel(): string { return 'Kantor Cabang'; }
-    public static function getPluralModelLabel(): string { return 'Master Kantor Cabang'; }
+    public static function getNavigationGroup(): ?string
+    {
+        return __('app.nav_group_org');
+    }
 
-    public static function canViewAny(): bool { return auth()->user()?->hasRole('admin') ?? false; }
-    public static function canCreate(): bool { return auth()->user()?->hasRole('admin') ?? false; }
-    public static function canEdit($record): bool { return auth()->user()?->hasRole('admin') ?? false; }
-    public static function canDelete($record): bool { return auth()->user()?->hasRole('admin') ?? false; }
+    public static function getNavigationLabel(): string
+    {
+        return 'Master Kantor Cabang';
+    }
+
+    public static function getModelLabel(): string
+    {
+        return 'Kantor Cabang';
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return 'Master Kantor Cabang';
+    }
+
+    public static function canViewAny(): bool
+    {
+        return auth()->user()?->hasRole('admin') ?? false;
+    }
+
+    public static function canCreate(): bool
+    {
+        return auth()->user()?->hasRole('admin') ?? false;
+    }
+
+    public static function canEdit($record): bool
+    {
+        return auth()->user()?->hasRole('admin') ?? false;
+    }
+
+    public static function canDelete($record): bool
+    {
+        return auth()->user()?->hasRole('admin') ?? false;
+    }
 
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            \Filament\Schemas\Components\Section::make('Informasi Kantor Cabang')
+            Section::make('Informasi Kantor Cabang')
                 ->description('Profil kantor cabang bank, tipe unit kerja, dan konfigurasi jam operasional.')
                 ->schema([
                     TextInput::make('code')
@@ -95,15 +129,15 @@ class BranchResource extends Resource
             ->recordActions([
                 Action::make('kiosk_link')
                     ->label('Kiosk')
-                    ->icon('heroicon-m-ticket')
+                    ->icon(Heroicon::Ticket)
                     ->color('success')
-                    ->url(fn (Branch $record) => url('/ambil-nomor/' . $record->code))
+                    ->url(fn (Branch $record) => url('/ambil-nomor/'.$record->code))
                     ->openUrlInNewTab(),
                 Action::make('display_link')
                     ->label('Display TV')
-                    ->icon('heroicon-m-tv')
+                    ->icon(Heroicon::Tv)
                     ->color('warning')
-                    ->url(fn (Branch $record) => url('/display/' . $record->code))
+                    ->url(fn (Branch $record) => url('/display/'.$record->code))
                     ->openUrlInNewTab(),
                 EditAction::make(),
                 DeleteAction::make(),

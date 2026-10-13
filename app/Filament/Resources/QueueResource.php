@@ -6,8 +6,10 @@ use App\Enums\QueueStatus;
 use App\Filament\Resources\QueueResource\Pages\ManageQueues;
 use App\Models\Queue;
 use App\Models\QueueLog;
+use App\Models\Scopes\ServiceSettingScope;
 use App\Models\ServiceSetting;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
@@ -15,6 +17,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
@@ -26,18 +29,50 @@ use Illuminate\Support\Facades\DB;
 class QueueResource extends Resource
 {
     protected static ?string $model = Queue::class;
-    protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-inbox-stack';
+
+    protected static \BackedEnum|string|null $navigationIcon = Heroicon::OutlinedInboxStack;
+
     protected static ?int $navigationSort = 2;
 
-    public static function getNavigationGroup(): ?string { return __('app.nav_group_queue'); }
-    public static function getNavigationLabel(): string { return __('app.queue_management'); }
-    public static function getModelLabel(): string { return __('app.ticket_number'); }
-    public static function getPluralModelLabel(): string { return __('app.queue_management'); }
+    public static function getNavigationGroup(): ?string
+    {
+        return __('app.nav_group_queue');
+    }
 
-    public static function canViewAny(): bool { return auth()->user()?->can('view_any_queue') ?? false; }
-    public static function canCreate(): bool { return auth()->user()?->can('create_queue') ?? false; }
-    public static function canEdit(Model $record): bool { return auth()->user()?->can('edit_queue') ?? false; }
-    public static function canDelete(Model $record): bool { return auth()->user()?->can('delete_queue') ?? false; }
+    public static function getNavigationLabel(): string
+    {
+        return __('app.queue_management');
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __('app.ticket_number');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('app.queue_management');
+    }
+
+    public static function canViewAny(): bool
+    {
+        return auth()->user()?->can('view_any_queue') ?? false;
+    }
+
+    public static function canCreate(): bool
+    {
+        return auth()->user()?->can('create_queue') ?? false;
+    }
+
+    public static function canEdit(Model $record): bool
+    {
+        return auth()->user()?->can('edit_queue') ?? false;
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return auth()->user()?->can('delete_queue') ?? false;
+    }
 
     public static function getEloquentQuery(): Builder
     {
@@ -53,6 +88,10 @@ class QueueResource extends Resource
         $expireQuery->update(['status' => QueueStatus::SKIPPED]);
 
         $query = parent::getEloquentQuery()->with(['serviceSetting', 'servedBy', 'branch']);
+
+        if ($user?->hasRole('admin_cabang')) {
+            return $query->where('branch_id', $user->branch_id ?? 0);
+        }
 
         if ($user && ! $user->hasRole('admin')) {
             if ($user->branch_id) {
@@ -70,7 +109,7 @@ class QueueResource extends Resource
                 };
             }
 
-            $matchingSettingIds = $serviceKey 
+            $matchingSettingIds = $serviceKey
                 ? ServiceSetting::query()
                     ->when($user->branch_id, fn ($q) => $q->where('branch_id', $user->branch_id))
                     ->where('service', $serviceKey)
@@ -79,7 +118,7 @@ class QueueResource extends Resource
                 : ($user->service_setting_id ? [$user->service_setting_id] : []);
 
             $baseQuery = Queue::query()
-                ->withoutGlobalScope(\App\Models\Scopes\ServiceSettingScope::class);
+                ->withoutGlobalScope(ServiceSettingScope::class);
 
             if ($user->branch_id) {
                 $baseQuery->where('branch_id', $user->branch_id);
@@ -144,10 +183,11 @@ class QueueResource extends Resource
                     if ($user && ! $user->hasRole('admin') && $user->branch_id) {
                         $query->where('branch_id', $user->branch_id);
                     }
+
                     return $query->pluck('counter_name', 'id');
                 })
                 ->default($assignedServiceId)
-                ->disabled(!empty($assignedServiceId) && !$user->hasRole('admin'))
+                ->disabled(! empty($assignedServiceId) && ! $user->hasRole('admin'))
                 ->dehydrated()
                 ->required(),
             Select::make('status')
@@ -173,7 +213,7 @@ class QueueResource extends Resource
             ->paginated($isAdmin ? [10, 25, 50] : false)
             ->emptyStateHeading('Tidak Ada Antrean')
             ->emptyStateDescription('Tidak ada antrean menunggu saat ini.')
-            ->emptyStateIcon('heroicon-o-check-circle')
+            ->emptyStateIcon(Heroicon::OutlinedCheckCircle)
             ->columns([
                 TextColumn::make('number')
                     ->label(fn () => __('app.queue_number'))
@@ -187,17 +227,17 @@ class QueueResource extends Resource
                     ->badge()
                     ->color('info')
                     ->sortable(),
-                TextColumn::make('serviceSetting.counter_name')->label(fn () => __('app.service'))->sortable()->placeholder('-'),
+                TextColumn::make('serviceSetting.counter_name')->label(fn () => __('app.service'))->sortable()->wrap()->visible($isAdmin)->placeholder('-'),
                 TextColumn::make('status')
                     ->label(fn () => __('app.status'))
                     ->badge()
                     ->color(fn (QueueStatus $state) => $state->getColor())
                     ->formatStateUsing(fn (QueueStatus $state) => $state->getLabel()),
-                TextColumn::make('called_at')->label(fn () => __('app.call_time'))->dateTime('d M Y H:i')->placeholder('-'),
-                TextColumn::make('servedBy.name')->label(fn () => __('app.active_staff'))->placeholder('-'),
+                TextColumn::make('called_at')->label(fn () => __('app.call_time'))->dateTime($isAdmin ? 'd M Y H:i' : 'H:i')->placeholder('-'),
+                TextColumn::make('servedBy.name')->label(fn () => __('app.active_staff'))->wrap()->visible($isAdmin)->toggleable(isToggledHiddenByDefault: true)->placeholder('-'),
             ])->filters([
                 Filter::make('today')
-                    ->label('📅 Antrean Hari Ini (Default)')
+                    ->label('Antrean hari ini')
                     ->default()
                     ->query(fn (Builder $query): Builder => $query->whereDate('created_at', now()->toDateString())),
                 SelectFilter::make('branch_id')
@@ -212,7 +252,7 @@ class QueueResource extends Resource
                     QueueStatus::SKIPPED->value => QueueStatus::SKIPPED->getLabel(),
                 ]),
             ])->recordActions([
-                Action::make('call')
+                Action::make('call')->button()
                     ->label(fn () => __('app.call_next'))
                     ->color('info')
                     ->visible(fn (Queue $record) => $record->status === QueueStatus::WAITING)
@@ -270,10 +310,10 @@ class QueueResource extends Resource
                             ]);
                         });
                     }),
-                Action::make('recall')
+                Action::make('recall')->button()
                     ->label('Panggil Ulang')
                     ->color('warning')
-                    ->icon('heroicon-m-speaker-wave')
+                    ->icon(Heroicon::SpeakerWave)
                     ->visible(fn (Queue $record) => in_array($record->status, [QueueStatus::CALLED, QueueStatus::SERVING], true))
                     ->action(function (Queue $record): void {
                         DB::transaction(function () use ($record): void {
@@ -301,7 +341,7 @@ class QueueResource extends Resource
                             ->warning()
                             ->send();
                     }),
-                Action::make('complete')
+                Action::make('complete')->button()
                     ->label(fn () => __('app.complete'))
                     ->color('success')
                     ->visible(fn (Queue $record) => in_array($record->status, [QueueStatus::CALLED, QueueStatus::SERVING], true))
@@ -320,7 +360,7 @@ class QueueResource extends Resource
                             }
                         });
                     }),
-                Action::make('skip')
+                Action::make('skip')->button()
                     ->label(fn () => __('app.skip'))
                     ->color('gray')
                     ->visible(fn (Queue $record) => in_array($record->status, [QueueStatus::WAITING, QueueStatus::CALLED, QueueStatus::SERVING], true))
@@ -339,8 +379,10 @@ class QueueResource extends Resource
                             }
                         });
                     }),
-                EditAction::make()->visible(fn () => auth()->user()?->hasRole('admin') ?? false),
-                DeleteAction::make()->visible(fn () => auth()->user()?->hasRole('admin') ?? false),
+                ActionGroup::make([
+                    EditAction::make(),
+                    DeleteAction::make(),
+                ])->visible(fn () => auth()->user()?->hasRole('admin') ?? false),
             ])->defaultSort('id', 'desc');
     }
 

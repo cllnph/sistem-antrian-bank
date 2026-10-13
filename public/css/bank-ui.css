@@ -1,0 +1,28 @@
+/* Shared typography and responsive refinements for standalone screens. */
+body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+button, input, select, textarea { font: inherit; }
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+button, [role="button"], input[type="submit"] { touch-action: manipulation; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid #f3b313; outline-offset: 3px; }
+h1, h2, h3 { text-wrap: balance; }
+p, label, td, th { overflow-wrap: break-word; }
+input, select, textarea { max-width: 100%; }
+.receipt-paper, .verify-card { font-variant-numeric: tabular-nums; }
+.receipt-paper a { color: #002b49; }
+.info-table td { padding-block: 10px; line-height: 1.6; }
+.verify-card .ticket-number, .hero-ticket-number, .receipt-ticket-number { font-variant-numeric: tabular-nums; }
+.verify-card p, .verify-card .footer-note { line-height: 1.7; }
+.navbar .nav-btn { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+@media (max-width: 640px) {
+    nav.navbar { padding: 14px 16px; gap: 14px; flex-wrap: wrap; }
+    .nav-left, .nav-right { flex-wrap: wrap; gap: 12px; }
+    .verify-card { padding-inline: 20px; }
+    .kiosk-header .brand-logo-wrap { min-width: 0; }
+    .kiosk-header .clock-display { flex-shrink: 0; }
+    .modal-actions { flex-wrap: wrap; gap: 10px; }
+    .receipt-paper { max-width: 100%; }
+    .info-table td:first-child { width: 42%; }
+}
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
