@@ -19,6 +19,9 @@ class ServiceSettingScope implements Scope
             if (! $user->hasRole('admin')) {
                 if ($user->branch_id) {
                     $builder->where($model->getTable() . '.branch_id', $user->branch_id);
+                } else {
+                    // Legacy accounts without an office must never see other offices.
+                    $builder->whereNull($model->getTable() . '.branch_id');
                 }
 
                 $serviceSetting = $user->serviceSetting;

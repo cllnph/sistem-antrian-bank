@@ -50,15 +50,16 @@ Route::middleware(['auth'])->group(function () {
     // Impersonation Routes using official STS Impersonation
     Route::get('/admin/impersonate/{user}', function (User $user) {
         $currentUser = auth()->user();
-        if (! $currentUser?->hasRole('admin') && ! Impersonation::isImpersonating()) {
-            abort(403, 'Hanya Administrator yang dapat melakukan impersonate.');
-        }
+        abort_unless($currentUser?->canImpersonate() && $user->canBeImpersonated()
+            && $currentUser->id !== $user->id && ! Impersonation::isImpersonating(), 403,
+            'Mode petugas hanya dapat dibuka oleh admin untuk akun aktif lain. Kembali ke admin sebelum berpindah akun.');
 
         session()->put('impersonate.back_to', route('filament.admin.pages.admin-control-center'));
-        Impersonation::enter($currentUser, $user);
+        abort_unless(Impersonation::enter($currentUser, $user), 500, 'Mode petugas gagal dibuka.');
+        session()->regenerate();
 
         return redirect()->route('filament.admin.resources.queues.index');
-    })->name('admin.impersonate');
+    })->whereNumber('user')->name('admin.impersonate');
 
     Route::get('/admin/impersonate/leave', function () {
         return redirect()->route('filament-impersonate.leave');
@@ -76,6 +77,7 @@ Route::get('/api/display/data/{branch?}', [DisplayController::class, 'getDisplay
 Route::get('/ambil-nomor/{branch?}', [QueueController::class, 'takeNumber'])->name('queue.take-number');
 Route::post('/ambil-nomor/{branch?}', [QueueController::class, 'storeNumber'])->name('queue.store-number');
 Route::get('/verifikasi/{queueId}', [QueueController::class, 'verifyTicket'])->whereNumber('queueId')->name('queue.verify');
+Route::get('/print-jobs/{printJob}', [\App\Http\Controllers\PrintJobController::class, 'show'])->whereUuid('printJob')->name('print-jobs.show');
 
 // Officer Consoles -> Filament Queue Resource
 Route::middleware(['auth', 'role:cs'])->group(function () {

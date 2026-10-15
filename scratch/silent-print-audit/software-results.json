@@ -1,0 +1,23 @@
+{
+  "launcher": {
+    "ready": "passed",
+    "preserve": "passed",
+    "missing": "passed",
+    "virtual": "passed",
+    "offline": "passed",
+    "error": "passed",
+    "running": "passed",
+    "invalid-url": "passed",
+    "busy": "passed",
+    "printer_preferences": "passed",
+    "preserve_windows_default": "passed"
+  },
+  "browser": {
+    "cs_single_print_and_double_click_guard": "passed",
+    "teller_single_print_and_double_click_guard": "passed",
+    "failed_issuance_does_not_print": "passed",
+    "failed_print_does_not_reissue_ticket": "passed",
+    "javascript_errors": []
+  },
+  "physical_print": "deferred by user until printer is available"
+}

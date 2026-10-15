@@ -4,11 +4,24 @@ namespace App\Observers;
 
 use App\Models\ServiceSetting;
 use App\Services\NotificationService;
+use App\Services\IntegrityRules;
+use App\Enums\QueueStatus;
+use Illuminate\Validation\ValidationException;
 
 class ServiceSettingObserver
 {
     public function saving(ServiceSetting $setting): void
     {
+        if (! in_array($setting->service, ['cs', 'teller', 'umum'], true)) {
+            throw ValidationException::withMessages(['service' => 'Jenis layanan harus CS, teller, atau umum.']);
+        }
+        if ($setting->exists && $setting->isDirty(['branch_id', 'service']) && IntegrityRules::deletionReason($setting)) {
+            throw ValidationException::withMessages(['service' => 'Kantor dan jenis layanan loket yang sudah digunakan tidak dapat diubah.']);
+        }
+        if ($setting->exists && $setting->isDirty('is_active') && ! $setting->is_active
+            && $setting->queues()->withoutGlobalScopes()->whereIn('status', [QueueStatus::CALLED, QueueStatus::SERVING])->exists()) {
+            throw ValidationException::withMessages(['is_active' => 'Selesaikan pelayanan aktif sebelum menutup loket.']);
+        }
         $actor = auth()->user();
         if ($actor?->hasRole('admin_cabang')) {
             abort_unless($actor->branch_id && (int) $setting->branch_id === (int) $actor->branch_id, 403);
@@ -16,6 +29,11 @@ class ServiceSettingObserver
                 abort_unless((int) $setting->getOriginal('branch_id') === (int) $actor->branch_id, 403);
             }
         }
+    }
+
+    public function deleting(ServiceSetting $setting): void
+    {
+        IntegrityRules::assertDeletable($setting);
     }
 
     /**

@@ -71,6 +71,7 @@ class BranchResource extends Resource
     {
         return $schema->components([
             Section::make('Informasi Kantor Cabang')
+                ->columnSpanFull()
                 ->description('Profil kantor cabang bank, tipe unit kerja, dan konfigurasi jam operasional.')
                 ->schema([
                     TextInput::make('code')
@@ -101,7 +102,7 @@ class BranchResource extends Resource
                         ->placeholder('Contoh: 0251-8321098'),
                     TextInput::make('operating_hours')
                         ->label('Jam Layanan')
-                        ->default('Senin – Jumat (08.00 – 16.00 WIB)')
+                        ->default('Senin – Jumat (08.00 – 15.00 WIB)')
                         ->required(),
                     Textarea::make('address')
                         ->label('Alamat Lengkap (Muncul di Struk & TV Display)')
@@ -140,7 +141,10 @@ class BranchResource extends Resource
                     ->url(fn (Branch $record) => url('/display/'.$record->code))
                     ->openUrlInNewTab(),
                 EditAction::make(),
-                DeleteAction::make(),
+                DeleteAction::make()
+                        ->disabled(fn ($record) => \App\Services\IntegrityRules::deletionReason($record) !== null)
+                        ->tooltip(fn ($record) => \App\Services\IntegrityRules::deletionReason($record))
+                        ->before(fn ($record, DeleteAction $action) => \App\Services\IntegrityRules::beforeDelete($record, $action)),
             ]);
     }
 

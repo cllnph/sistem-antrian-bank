@@ -1,0 +1,27 @@
+{
+  "physical_print": "pending: physical printer unavailable; fake printer only",
+  "cs": {
+    "ticket": "CS-004",
+    "request_id": "a917c4d3-6825-404d-b2c4-bab16e74e1d9",
+    "status": "submitted",
+    "double_click": "one issuance",
+    "browser_print_calls": 0
+  },
+  "teller": {
+    "ticket": "T-003",
+    "request_id": "0addbf46-aaaf-46cf-acbc-c06d9b9a1fdd",
+    "status": "submitted",
+    "double_click": "one issuance",
+    "browser_print_calls": 0
+  },
+  "concurrent_same_uuid": {
+    "ticket": "CS-005",
+    "one_job": true
+  },
+  "other_session_status": "403",
+  "replay": "same ticket and job",
+  "lost_response_retry": "same ticket, no replacement",
+  "issuance_failure": "message shown, no print call",
+  "print_failure": "original number shown; no automatic replacement",
+  "page_errors": []
+}

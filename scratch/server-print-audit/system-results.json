@@ -1,0 +1,32 @@
+{
+  "regression": {
+    "name": "D:\\xampp\\htdocs\\sistem-antrian-bank\\phpunit.xml",
+    "tests": "138",
+    "assertions": "867",
+    "errors": "0",
+    "failures": "0",
+    "skipped": "0",
+    "time": "993.317210"
+  },
+  "actual_kiosk_get": 200,
+  "browser_print_call_in_actual_html": false,
+  "windows_default_printer": "Microsoft Print to PDF",
+  "native_helper_mock": {
+    "normal_exit": 0,
+    "timeout_exit": 124,
+    "orphan_native_process": false,
+    "arguments": [
+      "-new-window",
+      "-print-to",
+      "ITPRINTER (L6290 Series)",
+      "-silent",
+      "-print-settings",
+      "noscale,1x,simplex"
+    ]
+  },
+  "printer_rejections": [
+    "missing printer",
+    "Microsoft Print to PDF"
+  ],
+  "physical_print": "NOT TESTED: printer unavailable; no new physical jobs sent"
+}

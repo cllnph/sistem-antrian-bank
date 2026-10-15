@@ -12,7 +12,14 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use App\Filament\Widgets\ControlCenterStaffWidget;
+use App\Filament\Widgets\RecentQueueActivityWidget;
+use Filament\Schemas\Components\EmbeddedTable;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Livewire;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Filament\Widgets\StatsOverviewWidget\Stat;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
@@ -27,8 +34,6 @@ class AdminControlCenter extends Page implements HasTable
     protected static \BackedEnum|string|null $navigationIcon = Heroicon::OutlinedPresentationChartLine;
 
     protected static ?int $navigationSort = 1;
-
-    protected string $view = 'filament.pages.admin-control-center';
 
     public static function shouldRegisterNavigation(): bool
     {
@@ -65,6 +70,37 @@ class AdminControlCenter extends Page implements HasTable
         return auth()->user()?->can('view_control_center') ?? false;
     }
 
+    public function content(Schema $schema): Schema
+    {
+        $summary = $this->getViewData()['summary'];
+        $serviceSections = [];
+        foreach ($summary as $item) {
+            $serviceSections[] = Section::make($item['label'])->schema([
+                Grid::make(['default' => 1, 'md' => 2])->schema([
+                    Stat::make(__('app.status_waiting'), $item['waiting'])->icon(Heroicon::OutlinedClock),
+                    Stat::make(__('app.status_called'), $item['called'])->icon(Heroicon::OutlinedMegaphone),
+                    Stat::make(__('app.status_completed'), $item['completed'])->icon(Heroicon::OutlinedCheckCircle),
+                    Stat::make(__('app.status_skipped'), $item['skipped'])->icon(Heroicon::OutlinedForward),
+                ]),
+            ]);
+        }
+
+        return $schema->extraAttributes(['wire:poll.10s' => '$refresh'])->components([
+            Section::make('Pusat Kendali Operasional Cabang')
+                ->description('Pantau antrean hari ini pada seluruh cabang atau pilih satu kantor.')
+                ->schema($this->branchFilter(Schema::make($this))->getComponents())
+                ->visible(fn () => auth()->user()?->hasRole('admin')),
+            Grid::make(['default' => 1, 'xl' => 2])->schema($serviceSections),
+            EmbeddedTable::make()->visible(fn () => auth()->user()?->hasRole('admin')),
+            Grid::make(['default' => 1, 'xl' => 2])->schema([
+                Livewire::make(ControlCenterStaffWidget::class, ['selectedBranchId' => $this->selectedBranchId])
+                    ->key('control-staff-'.($this->selectedBranchId ?? 'all')),
+                Livewire::make(RecentQueueActivityWidget::class, ['selectedBranchId' => $this->selectedBranchId])
+                    ->key('control-recent-'.($this->selectedBranchId ?? 'all')),
+            ]),
+        ]);
+    }
+
     public function branchFilter(Schema $schema): Schema
     {
         return $schema->components([
@@ -81,7 +117,7 @@ class AdminControlCenter extends Page implements HasTable
         return collect(['cs' => 'Customer Service', 'teller' => 'Teller'])->map(fn ($label, $service) => Action::make('reset_'.$service)
             ->label('Reset '.$label)
             ->icon(Heroicon::OutlinedArrowPath)
-            ->color('danger')->requiresConfirmation()
+            ->color('danger')->visible(fn () => auth()->user()?->can('reset_queues') ?? false)->requiresConfirmation()
             ->modalHeading('Tutup antrean aktif '.$label.'?')
             ->modalDescription('Antrean aktif pada cakupan cabang yang dipilih akan ditandai dilewati. Riwayat tetap disimpan.')
             ->action(fn () => $this->resetService($service))
@@ -115,27 +151,11 @@ class AdminControlCenter extends Page implements HasTable
 
     public function resetService(string $serviceKey): void
     {
-        if (! in_array($serviceKey, ['cs', 'teller'], true)) {
-            return;
-        }
-
-        $branchId = $this->selectedBranchId ? (int) $this->selectedBranchId : null;
-
-        $settingQuery = ServiceSetting::query()->where('service', $serviceKey);
-        if ($branchId) {
-            $settingQuery->where('branch_id', $branchId);
-        }
-        $settingIds = $settingQuery->pluck('id')->toArray();
-
-        if (empty($settingIds)) {
-            return;
-        }
-
-        $count = Queue::query()
-            ->when($branchId, fn ($q) => $q->where('branch_id', $branchId))
-            ->whereIn('service_setting_id', $settingIds)
-            ->whereIn('status', [QueueStatus::WAITING, QueueStatus::CALLED])
-            ->update(['status' => QueueStatus::SKIPPED]);
+        $count = \App\Services\QueueResetService::reset(
+            auth()->user(),
+            $this->selectedBranchId !== null && $this->selectedBranchId !== '' ? (int) $this->selectedBranchId : null,
+            $serviceKey,
+        );
 
         Notification::make()
             ->title("Antrean {$serviceKey} direset")
@@ -147,21 +167,23 @@ class AdminControlCenter extends Page implements HasTable
     protected function getViewData(): array
     {
         $today = now()->startOfDay();
-        $branchId = $this->selectedBranchId ? (int) $this->selectedBranchId : null;
+        $branchId = auth()->user()?->hasRole('admin')
+            ? ($this->selectedBranchId ? (int) $this->selectedBranchId : null)
+            : (int) (auth()->user()?->branch_id ?? 0);
 
         $summary = [];
         $settingsQuery = ServiceSetting::query()->whereIn('service', ['cs', 'teller']);
-        if ($branchId) {
+        if ($branchId !== null) {
             $settingsQuery->where('branch_id', $branchId);
         }
         $settings = $settingsQuery->get();
 
-        foreach (['cs' => __('app.role_cs'), 'teller' => __('app.role_teller')] as $serviceKey => $label) {
+        foreach (['cs' => \App\Models\Role::where('name', 'cs')->where('guard_name', 'web')->first()?->display_name ?? 'Customer Service', 'teller' => \App\Models\Role::where('name', 'teller')->where('guard_name', 'web')->first()?->display_name ?? 'Teller'] as $serviceKey => $label) {
             $serviceSettingIds = $settings->where('service', $serviceKey)->pluck('id')->toArray();
 
             $queueQuery = fn () => Queue::query()
                 ->withoutGlobalScope(ServiceSettingScope::class)
-                ->when($branchId, fn ($q) => $q->where('branch_id', $branchId))
+                ->when($branchId !== null, fn ($q) => $q->where('branch_id', $branchId))
                 ->whereIn('service_setting_id', $serviceSettingIds)
                 ->where('created_at', '>=', $today);
 
@@ -175,7 +197,9 @@ class AdminControlCenter extends Page implements HasTable
         }
 
         // 9 Branches Aggregated Matrix
-        $allBranches = Branch::where('is_active', true)->orderBy('code')->get();
+        $allBranches = Branch::where('is_active', true)
+            ->when(! auth()->user()?->hasRole('admin'), fn ($query) => $query->whereKey($branchId))
+            ->orderBy('code')->get();
         $branchStats = [];
         foreach ($allBranches as $b) {
             $bQueues = Queue::withoutGlobalScope(ServiceSettingScope::class)
@@ -195,14 +219,14 @@ class AdminControlCenter extends Page implements HasTable
             ];
         }
 
-        $staffQuery = User::role(['cs', 'teller'])->with(['roles', 'branch']);
-        if ($branchId) {
+        $staffQuery = User::withRoleNames(['cs', 'teller'])->with(['roles', 'branch']);
+        if ($branchId !== null) {
             $staffQuery->where('branch_id', $branchId);
         }
 
         $recentQueuesQuery = Queue::withoutGlobalScope(ServiceSettingScope::class)
             ->with(['serviceSetting', 'branch', 'servedBy'])
-            ->when($branchId, fn ($q) => $q->where('branch_id', $branchId))
+            ->when($branchId !== null, fn ($q) => $q->where('branch_id', $branchId))
             ->latest('id')
             ->limit(12);
 

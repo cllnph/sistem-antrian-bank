@@ -11,12 +11,67 @@ use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
 
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Builder;
 use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable implements FilamentUser
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable, HasRoles;
+    use HasFactory, Notifiable;
+    use HasRoles {
+        syncRoles as protected syncRolesWithoutIntegrity;
+        removeRole as protected removeRoleWithoutIntegrity;
+        assignRole as protected assignRoleWithoutIntegrity;
+    }
+
+    protected $attributes = [
+        'is_active' => true,
+    ];
+
+    private bool $syncingValidatedRoles = false;
+
+    public function delete()
+    {
+        // HasRoles detaches pivots during deleting; validate before those events.
+        \App\Services\IntegrityRules::assertDeletable($this);
+
+        return parent::delete();
+    }
+
+    public function syncRoles(...$roles): static
+    {
+        $ids = $this->collectRoles(...$roles);
+        \App\Services\IntegrityRules::assertRoleChange($this, $ids);
+
+        $this->syncingValidatedRoles = true;
+        try {
+            return $this->syncRolesWithoutIntegrity(...$roles);
+        } finally {
+            $this->syncingValidatedRoles = false;
+        }
+    }
+
+    public function assignRole(...$roles): static
+    {
+        $current = $this->exists ? $this->roles()->pluck('roles.id')->all() : [];
+        $ids = array_values(array_unique(array_merge($current, $this->collectRoles(...$roles))));
+        if (! $this->syncingValidatedRoles) {
+            \App\Services\IntegrityRules::assertRoleChange($this, $ids);
+        }
+
+        return $this->assignRoleWithoutIntegrity(...$roles);
+    }
+
+    public function removeRole(...$roles): static
+    {
+        $removed = $this->collectRoles(...$roles);
+        $remaining = $this->roles()->whereNotIn('roles.id', $removed)->pluck('roles.id')->all();
+        if (! $this->syncingValidatedRoles) {
+            \App\Services\IntegrityRules::assertRoleChange($this, $remaining);
+        }
+
+        return $this->removeRoleWithoutIntegrity(...$roles);
+    }
 
     protected $fillable = [
         'name',
@@ -37,6 +92,13 @@ class User extends Authenticatable implements FilamentUser
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class, 'branch_id');
+    }
+
+    public function scopeWithRoleNames(Builder $query, array $names): Builder
+    {
+        // Reporting must also work when an operational role has been removed.
+        return $query->whereHas('roles', fn (Builder $roles) => $roles
+            ->where('guard_name', 'web')->whereIn('name', $names));
     }
 
     protected $hidden = [
@@ -81,11 +143,12 @@ class User extends Authenticatable implements FilamentUser
 
     public function canImpersonate(): bool
     {
-        return $this->hasRole('admin');
+        return $this->is_active && $this->hasRole('admin')
+            && ! \STS\FilamentImpersonate\Facades\Impersonation::isImpersonating();
     }
 
     public function canBeImpersonated(): bool
     {
-        return $this->is_active;
+        return (bool) $this->is_active;
     }
 }

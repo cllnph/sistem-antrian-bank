@@ -10,6 +10,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Queue extends Model
 {
+    protected $attributes = ['status' => 'waiting'];
+
     protected static function booted(): void
     {
         static::addGlobalScope(new ServiceSettingScope());

@@ -1,0 +1,18 @@
+{
+  "printer": "ITPRINTER (L6290 Series)",
+  "fixture_tickets": [
+    {
+      "id": 1,
+      "number": "CS-001",
+      "status": "waiting"
+    }
+  ],
+  "windows_job_id": 2,
+  "native_auto_print_job_observed": true,
+  "observed_windows_status": "Error, Printing",
+  "observed_pages_printed": 0,
+  "audit_job_cancelled": true,
+  "remaining_audit_jobs_after_cancellation": 0,
+  "physical_paper_confirmation": "not performed; user has no printer available now and deferred until tomorrow",
+  "teller_physical_test": "deferred"
+}

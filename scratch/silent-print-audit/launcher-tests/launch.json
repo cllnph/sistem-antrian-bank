@@ -1,0 +1,12 @@
+﻿{
+    "executable":  "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "arguments":  [
+                      "--user-data-dir=\"D:\\xampp\\htdocs\\sistem-antrian-bank\\scratch\\silent-print-audit\\launcher-tests\\preserve\\BankDPTaspenKiosk\"",
+                      "--kiosk-printing",
+                      "--no-first-run",
+                      "--no-default-browser-check",
+                      "--start-maximized",
+                      "--app=\"http://127.0.0.1:7102/ambil-nomor\""
+                  ],
+    "window_style":  "Normal"
+}

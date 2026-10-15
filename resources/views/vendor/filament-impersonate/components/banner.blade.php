@@ -5,8 +5,9 @@
         === \Filament\Facades\Filament::getAuthGuard();
 @endphp
 @if($impersonating && $guardMatches)
-    <div id="impersonate-banner" role="status">
-        <span>Mode petugas <span aria-hidden="true">·</span> Anda sedang menggunakan akun <strong>{{ $display ?? auth()->user()?->name }}</strong></span>
-        <x-filament::button tag="a" :href="route('filament-impersonate.leave')" color="gray" size="sm">Kembali ke admin</x-filament::button>
-    </div>
+    <x-filament::section heading="Mode petugas" :description="'Anda sedang menggunakan akun '.($display ?? auth()->user()?->name)">
+        <x-slot name="afterHeader">
+            <x-filament::button tag="a" :href="route('filament-impersonate.leave')" color="gray" :icon="\Filament\Support\Icons\Heroicon::OutlinedArrowUturnLeft">Kembali ke admin</x-filament::button>
+        </x-slot>
+    </x-filament::section>
 @endif

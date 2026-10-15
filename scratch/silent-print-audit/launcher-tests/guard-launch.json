@@ -1,0 +1,14 @@
+﻿{
+    "executable":  "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+    "arguments":  [
+                      "-NoLogo",
+                      "-NoProfile",
+                      "-ExecutionPolicy",
+                      "Bypass",
+                      "-File",
+                      "\"D:\\xampp\\htdocs\\sistem-antrian-bank\\scripts\\Keep-PrinterDefault.ps1\"",
+                      "-SettingsBase64",
+                      "eyJvcmlnaW5hbF9wcmludGVyIjoiTWljcm9zb2Z0IFByaW50IHRvIFBERiIsImJyb3dzZXJfcGlkIjoxOTMwMCwia2lvc2tfcHJpbnRlciI6IklUUFJJTlRFUiAoTDYyOTAgU2VyaWVzKSJ9"
+                  ],
+    "window_style":  "Hidden"
+}

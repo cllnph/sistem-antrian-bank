@@ -11,12 +11,13 @@ use App\Models\ServiceSetting;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
-use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
+use Filament\Schemas\Components\Utilities\Get;
+use Illuminate\Validation\Rule;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
@@ -66,7 +67,7 @@ class QueueResource extends Resource
 
     public static function canEdit(Model $record): bool
     {
-        return auth()->user()?->can('edit_queue') ?? false;
+        return auth()->user()?->can('update', $record) ?? false;
     }
 
     public static function canDelete(Model $record): bool
@@ -78,14 +79,25 @@ class QueueResource extends Resource
     {
         $user = auth()->user();
 
-        // Auto-expire leftover WAITING/CALLED tickets from past days
+        // Only an operational user may close leftover tickets; read-only views
+        // must not mutate records. Keep an audit trail for each expiration.
         $expireQuery = Queue::query()
             ->whereDate('created_at', '<', now()->toDateString())
-            ->whereIn('status', [QueueStatus::WAITING, QueueStatus::CALLED]);
+            ->whereIn('status', [QueueStatus::WAITING, QueueStatus::CALLED, QueueStatus::SERVING]);
         if ($user && ! $user->hasRole('admin') && $user->branch_id) {
             $expireQuery->where('branch_id', $user->branch_id);
         }
-        $expireQuery->update(['status' => QueueStatus::SKIPPED]);
+        if ($user?->can('edit_queue')) {
+            DB::transaction(function () use ($expireQuery, $user): void {
+                foreach ($expireQuery->lockForUpdate()->get() as $expired) {
+                    $expired->update(['status' => QueueStatus::SKIPPED]);
+                    QueueLog::create([
+                        'queue_id' => $expired->id, 'branch_id' => $expired->branch_id,
+                        'actor_id' => $user->id, 'action' => 'expired',
+                    ]);
+                }
+            });
+        }
 
         $query = parent::getEloquentQuery()->with(['serviceSetting', 'servedBy', 'branch']);
 
@@ -170,28 +182,31 @@ class QueueResource extends Resource
         $assignedServiceId = $user?->service_setting_id;
 
         return $schema->components([
-            TextInput::make('number')->label(fn () => __('app.queue_number'))->required(),
+            TextInput::make('number')->label(fn () => __('app.queue_number'))->disabledOn('edit')->required(),
             Select::make('branch_id')
-                ->label('Cabang')
+                ->label('Cabang')->disabledOn('edit')->live()
+                ->afterStateUpdated(fn ($set) => $set('service_setting_id', null))
                 ->relationship('branch', 'name')
                 ->default($user?->branch_id)
                 ->required(),
             Select::make('service_setting_id')
                 ->label(fn () => __('app.service'))
-                ->options(function () use ($user) {
-                    $query = ServiceSetting::query();
+                ->options(function (Get $get) use ($user) {
+                    $query = ServiceSetting::query()->where('branch_id', $get('branch_id'))->where('is_active', true);
                     if ($user && ! $user->hasRole('admin') && $user->branch_id) {
                         $query->where('branch_id', $user->branch_id);
                     }
 
                     return $query->pluck('counter_name', 'id');
                 })
+                ->rules(fn (Get $get) => [Rule::exists('service_settings', 'id')->where('branch_id', $get('branch_id'))->where('is_active', true)])
+                ->disabledOn('edit')
                 ->default($assignedServiceId)
-                ->disabled(! empty($assignedServiceId) && ! $user->hasRole('admin'))
+                ->disabled(fn (string $operation) => $operation === 'edit' || (! empty($assignedServiceId) && ! $user->hasRole('admin')))
                 ->dehydrated()
                 ->required(),
             Select::make('status')
-                ->label(fn () => __('app.status'))
+                ->label(fn () => __('app.status'))->disabled()->dehydrated()
                 ->options([
                     QueueStatus::WAITING->value => QueueStatus::WAITING->getLabel(),
                     QueueStatus::CALLED->value => QueueStatus::CALLED->getLabel(),
@@ -252,12 +267,31 @@ class QueueResource extends Resource
                     QueueStatus::SKIPPED->value => QueueStatus::SKIPPED->getLabel(),
                 ]),
             ])->recordActions([
+                Action::make('reprint')
+                    ->label('Cetak Ulang')
+                    ->icon(Heroicon::OutlinedPrinter)
+                    ->authorize(fn (Queue $record) => auth()->user()?->can('print', $record) ?? false)
+                    ->requiresConfirmation()
+                    ->modalDescription('Cetak nomor tiket yang sama. Periksa kertas dan printer terlebih dahulu agar tidak menghasilkan salinan ganda.')
+                    ->action(function (Queue $record): void {
+                        abort_unless(auth()->user()?->can('print', $record), 403);
+                        try {
+                            app(\App\Services\Printing\TicketPrinting::class)->reprint($record, auth()->user());
+                            Notification::make()->title('Cetak ulang '.$record->number.' dijadwalkan')->body('Nomor antrean tetap sama. Periksa hasil pada printer.')->success()->send();
+                        } catch (\RuntimeException $e) {
+                            Notification::make()->title('Cetak ulang belum dapat diproses')->body($e->getMessage())->danger()->send();
+                        }
+                    }),
                 Action::make('call')->button()
+                    ->authorize(fn (Queue $record) => auth()->user()?->can('update', $record) ?? false)
                     ->label(fn () => __('app.call_next'))
                     ->color('info')
                     ->visible(fn (Queue $record) => $record->status === QueueStatus::WAITING)
                     ->action(function (Queue $record): void {
+                        abort_unless(auth()->user()?->can('update', $record), 403);
                         DB::transaction(function () use ($record): void {
+                            $targetSettingId = auth()->user()?->service_setting_id ?? $record->service_setting_id;
+                            ServiceSetting::whereKey($targetSettingId)->lockForUpdate()->firstOrFail();
                             $lockedRecord = Queue::query()->where('id', $record->id)->lockForUpdate()->first();
                             if (! $lockedRecord || $lockedRecord->status !== QueueStatus::WAITING) {
                                 return;
@@ -294,6 +328,8 @@ class QueueResource extends Resource
                                 return;
                             }
 
+                            abort_unless(auth()->user()?->can('update', $lockedRecord), 403);
+
                             // Update record to CALLED status
                             $lockedRecord->update([
                                 'status' => QueueStatus::CALLED,
@@ -311,15 +347,18 @@ class QueueResource extends Resource
                         });
                     }),
                 Action::make('recall')->button()
+                    ->authorize(fn (Queue $record) => auth()->user()?->can('update', $record) ?? false)
                     ->label('Panggil Ulang')
                     ->color('warning')
                     ->icon(Heroicon::SpeakerWave)
                     ->visible(fn (Queue $record) => in_array($record->status, [QueueStatus::CALLED, QueueStatus::SERVING], true))
                     ->action(function (Queue $record): void {
+                        abort_unless(auth()->user()?->can('update', $record), 403);
                         DB::transaction(function () use ($record): void {
                             $lockedRecord = Queue::query()->where('id', $record->id)->lockForUpdate()->first();
                             if ($lockedRecord && in_array($lockedRecord->status, [QueueStatus::CALLED, QueueStatus::SERVING], true)) {
                                 $targetSettingId = auth()->user()?->service_setting_id ?? $lockedRecord->service_setting_id;
+                                abort_unless(auth()->user()?->can('update', $lockedRecord), 403);
                                 $lockedRecord->update([
                                     'called_at' => now(),
                                     'served_by' => auth()->id(),
@@ -342,13 +381,16 @@ class QueueResource extends Resource
                             ->send();
                     }),
                 Action::make('complete')->button()
+                    ->authorize(fn (Queue $record) => auth()->user()?->can('update', $record) ?? false)
                     ->label(fn () => __('app.complete'))
                     ->color('success')
                     ->visible(fn (Queue $record) => in_array($record->status, [QueueStatus::CALLED, QueueStatus::SERVING], true))
                     ->action(function (Queue $record): void {
+                        abort_unless(auth()->user()?->can('update', $record), 403);
                         DB::transaction(function () use ($record): void {
                             $lockedRecord = Queue::query()->where('id', $record->id)->lockForUpdate()->first();
                             if ($lockedRecord && in_array($lockedRecord->status, [QueueStatus::CALLED, QueueStatus::SERVING], true)) {
+                                abort_unless(auth()->user()?->can('update', $lockedRecord), 403);
                                 $lockedRecord->update(['status' => QueueStatus::COMPLETED]);
 
                                 QueueLog::create([
@@ -361,13 +403,16 @@ class QueueResource extends Resource
                         });
                     }),
                 Action::make('skip')->button()
+                    ->authorize(fn (Queue $record) => auth()->user()?->can('update', $record) ?? false)
                     ->label(fn () => __('app.skip'))
                     ->color('gray')
                     ->visible(fn (Queue $record) => in_array($record->status, [QueueStatus::WAITING, QueueStatus::CALLED, QueueStatus::SERVING], true))
                     ->action(function (Queue $record): void {
+                        abort_unless(auth()->user()?->can('update', $record), 403);
                         DB::transaction(function () use ($record): void {
                             $lockedRecord = Queue::query()->where('id', $record->id)->lockForUpdate()->first();
                             if ($lockedRecord && in_array($lockedRecord->status, [QueueStatus::WAITING, QueueStatus::CALLED, QueueStatus::SERVING], true)) {
+                                abort_unless(auth()->user()?->can('update', $lockedRecord), 403);
                                 $lockedRecord->update(['status' => QueueStatus::SKIPPED]);
 
                                 QueueLog::create([
@@ -380,8 +425,10 @@ class QueueResource extends Resource
                         });
                     }),
                 ActionGroup::make([
-                    EditAction::make(),
-                    DeleteAction::make(),
+                    DeleteAction::make()
+                        ->disabled(fn ($record) => \App\Services\IntegrityRules::deletionReason($record) !== null)
+                        ->tooltip(fn ($record) => \App\Services\IntegrityRules::deletionReason($record))
+                        ->before(fn ($record, DeleteAction $action) => \App\Services\IntegrityRules::beforeDelete($record, $action)),
                 ])->visible(fn () => auth()->user()?->hasRole('admin') ?? false),
             ])->defaultSort('id', 'desc');
     }

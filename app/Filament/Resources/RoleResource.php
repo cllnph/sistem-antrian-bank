@@ -13,7 +13,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
-use Spatie\Permission\Models\Role;
+use App\Models\Role;
 
 class RoleResource extends Resource
 {
@@ -71,12 +71,11 @@ class RoleResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            TextInput::make('name')->label('Nama Peran')
-                ->placeholder('misal: supervisor, auditor, head_teller')
-                ->required()
-                ->unique(ignoreRecord: true),
-            CheckboxList::make('permissions')->label('Hak Akses (Permissions)')
-                ->relationship('permissions', 'name')
+            TextInput::make('display_name')->label('Nama Peran')
+                ->placeholder('Contoh: Layanan Pelanggan, Petugas Kas, Auditor')
+                ->required()->maxLength(255),
+            CheckboxList::make('permissions')->label('Hak Akses (Permissions)')->columnSpanFull()
+                ->relationship('permissions', 'name')->required()->minItems(1)
                 ->columns(2)
                 ->getOptionLabelFromRecordUsing(fn ($record) => match ($record->name) {
                     'access_admin_panel' => 'Akses Panel Admin',
@@ -102,17 +101,14 @@ class RoleResource extends Resource
     public static function table(Table $table): Table
     {
         return $table->columns([
-            TextColumn::make('name')->label(fn () => __('app.role'))->searchable()->sortable()
-                ->formatStateUsing(fn (string $state) => match ($state) {
-                    'cs' => __('app.role_cs'),
-                    'teller' => __('app.role_teller'),
-                    'admin' => __('app.role_admin'),
-                    'supervisor' => __('app.role_supervisor'),
-                    default => ucfirst($state),
-                }),
+            TextColumn::make('display_name')->label(fn () => __('app.role'))
+                ->searchable(['display_name', 'name'])->sortable(),
             TextColumn::make('permissions_count')->label('Jumlah Hak Akses')->counts('permissions')->badge()->color('info'),
             TextColumn::make('created_at')->label(fn () => __('app.created_at'))->dateTime('d M Y H:i'),
-        ])->recordActions([EditAction::make(), DeleteAction::make()]);
+        ])->recordActions([EditAction::make(), DeleteAction::make()
+                        ->disabled(fn ($record) => \App\Services\IntegrityRules::deletionReason($record) !== null)
+                        ->tooltip(fn ($record) => \App\Services\IntegrityRules::deletionReason($record))
+                        ->before(fn ($record, DeleteAction $action) => \App\Services\IntegrityRules::beforeDelete($record, $action))]);
     }
 
     public static function getPages(): array

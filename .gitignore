@@ -21,6 +21,11 @@
 /storage/*.key
 /storage/pail
 /vendor
+/tools/SumatraPDF/*.exe
+/tools/SumatraPDF/*.zip
+/tools/SumatraPDF/*.txt
+/tools/TicketPrinter/*.exe
+/tools/TicketPrinter/*.sha256
 _ide_helper.php
 Homestead.json
 Homestead.yaml

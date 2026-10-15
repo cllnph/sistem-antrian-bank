@@ -11,7 +11,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->singleton(\App\Services\Printing\PrinterGateway::class, function () {
+            // Only a deliberately isolated testing server may replace the native printer.
+            if (app()->environment('testing') && env('PRINT_TEST_FAKE', false) === true && config('database.default') === 'sqlite') {
+                return new \App\Services\Printing\FakePrinterGateway;
+            }
+            return new \App\Services\Printing\WindowsPrinterGateway;
+        });
     }
 
     /**
@@ -24,6 +30,9 @@ class AppServiceProvider extends ServiceProvider
         }
 
         \Illuminate\Support\Facades\Gate::before(function ($user, $ability) {
+            if (! $user->is_active) {
+                return false;
+            }
             if ($user->hasRole('admin')) {
                 return true;
             }
@@ -31,12 +40,15 @@ class AppServiceProvider extends ServiceProvider
 
         \Illuminate\Support\Facades\Event::listen(\Illuminate\Auth\Events\Login::class, function (\Illuminate\Auth\Events\Login $event) {
             if ($event->user instanceof \App\Models\User && $event->user->is_active) {
-                $event->user->timestamps = false;
-                $event->user->update(['last_login_at' => now()]);
+                // Login metadata is a system update, not a user-management action.
+                \App\Models\User::withoutTimestamps(fn () => $event->user
+                    ->forceFill(['last_login_at' => now()])->saveQuietly());
             }
         });
 
         \App\Models\User::observe(\App\Observers\UserObserver::class);
         \App\Models\ServiceSetting::observe(\App\Observers\ServiceSettingObserver::class);
+        \App\Models\Branch::observe(\App\Observers\BranchObserver::class);
+        \App\Models\Queue::observe(\App\Observers\QueueObserver::class);
     }
 }

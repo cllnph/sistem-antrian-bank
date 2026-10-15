@@ -23,12 +23,12 @@ class QueueStatsWidget extends BaseWidget
         $waitingTotal = Queue::query()->where('created_at', '>=', $today)->where('status', QueueStatus::WAITING)->count();
         $completedTotal = Queue::query()->where('created_at', '>=', $today)->where('status', QueueStatus::COMPLETED)->count();
 
-        $branchId = auth()->user()?->hasRole('admin') ? null : auth()->user()?->branch_id;
+        $branchId = auth()->user()?->hasRole('admin') ? null : (auth()->user()?->branch_id ?? 0);
         $staff = User::query()->where('is_active', true)
-            ->when($branchId, fn ($query) => $query->where('branch_id', $branchId));
-        $csCount = (clone $staff)->role('cs')->count();
-        $tellerCount = (clone $staff)->role('teller')->count();
-        $activeStaff = (clone $staff)->role(['cs', 'teller'])->count();
+            ->when($branchId !== null, fn ($query) => $query->where('branch_id', $branchId));
+        $csCount = (clone $staff)->withRoleNames(['cs'])->count();
+        $tellerCount = (clone $staff)->withRoleNames(['teller'])->count();
+        $activeStaff = (clone $staff)->withRoleNames(['cs', 'teller'])->count();
 
         return [
             Stat::make('Antrean Hari Ini', $todayTotal)

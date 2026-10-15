@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use Spatie\Permission\Models\Permission;
-use Spatie\Permission\Models\Role;
+use App\Models\Role;
 
 class BranchAdminRole
 {

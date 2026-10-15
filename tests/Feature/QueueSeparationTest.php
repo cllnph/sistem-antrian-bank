@@ -30,11 +30,11 @@ class QueueSeparationTest extends TestCase
         $teller = User::factory()->create(['service_setting_id' => $tellerSetting->id]);
         $teller->assignRole('teller');
 
-        Queue::create(['number' => 'CS-20260730-001', 'service_setting_id' => $csSetting->id, 'status' => 'waiting']);
-        Queue::create(['number' => 'T-20260730-001', 'service_setting_id' => $tellerSetting->id, 'status' => 'waiting']);
+        Queue::create(['number' => 'CS-001', 'service_setting_id' => $csSetting->id, 'status' => 'waiting']);
+        Queue::create(['number' => 'T-001', 'service_setting_id' => $tellerSetting->id, 'status' => 'waiting']);
 
         $this->actingAs($teller);
 
-        $this->assertSame(['T-20260730-001'], QueueResource::getEloquentQuery()->pluck('number')->all());
+        $this->assertSame(['T-001'], QueueResource::getEloquentQuery()->pluck('number')->all());
     }
 }

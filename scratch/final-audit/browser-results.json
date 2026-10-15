@@ -1,0 +1,26 @@
+{
+  "pages": [
+    {
+      "path": "/admin/login",
+      "status": 200
+    },
+    {
+      "path": "/ambil-nomor/002",
+      "status": 200
+    },
+    {
+      "path": "/display/002",
+      "status": 200
+    }
+  ],
+  "nine_branch_apis": "passed",
+  "invalid_branches": "404",
+  "mocked_one_tap_print": "passed",
+  "thermal_pdf_58_and_80mm": "passed",
+  "mobile_overflow": "none",
+  "javascript_errors": [],
+  "rapid_double_tap": "one_request_one_print",
+  "rejected_ticket": "no_print_button_recovers",
+  "display_html_injection": "escaped",
+  "live_queue_mutations": 0
+}

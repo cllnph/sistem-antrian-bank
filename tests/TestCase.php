@@ -14,6 +14,8 @@ abstract class TestCase extends BaseTestCase
 
         $app->make('config')->set('database.default', 'sqlite');
         $app->make('config')->set('database.connections.sqlite.database', ':memory:');
+        $app->instance(\App\Services\Printing\PrinterGateway::class, new \App\Services\Printing\FakePrinterGateway);
+        $app->make('config')->set('printing.require_worker', false);
 
         return $app;
     }

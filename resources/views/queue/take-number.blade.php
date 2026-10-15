@@ -8,8 +8,6 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html, body {
@@ -706,11 +704,57 @@
             color: #0f172a;
         }
 
+        #ticketPrintArea { display: none; }
+        #receiptPaper {
+            font-family: Arial, Helvetica, sans-serif;
+            text-align: center;
+            color: #000;
+            line-height: 1.35;
+            overflow-wrap: break-word;
+        }
+        #receiptPaper [hidden] { display: none !important; }
+        .thermal-header { border-bottom: 1px dashed #000; padding-bottom: 2.5mm; }
+        .thermal-bank-logo { display: block; width: 46mm; max-width: 100%; height: auto; margin: 0 auto 2mm; }
+        .thermal-branch { font-size: 9pt; font-weight: 700; margin-top: 1mm; }
+        .thermal-address { font-size: 8pt; line-height: 1.4; margin-top: 1.5mm; }
+        .thermal-contact { font-size: 8pt; margin-top: 1mm; }
+        .thermal-date { font-size: 8pt; margin-top: 2mm; }
+        .thermal-ticket { padding: 3mm 0; break-inside: avoid; }
+        .thermal-service { font-size: 10pt; font-weight: 700; text-transform: uppercase; }
+        .thermal-label { font-size: 8pt; margin-top: 2mm; letter-spacing: 0.5pt; }
+        .thermal-number { font-size: 34pt; font-weight: 900; line-height: 1.15; margin-top: 1mm; white-space: nowrap; }
+        .thermal-footer { border-top: 1px dashed #000; padding-top: 2mm; font-size: 8pt; line-height: 1.5; }
+
         /* Thermal Printer POS Optimizations */
+        @page { margin: 0; }
         @media print {
+            html, body {
+                width: 100% !important;
+                height: auto !important;
+                min-height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: visible !important;
+            }
             body {
+                display: block !important;
                 background: #ffffff !important;
                 color: #000000 !important;
+            }
+            body > :not(#ticketPrintArea) { display: none !important; }
+            #ticketPrintArea {
+                display: block !important;
+                width: 100% !important;
+                max-width: 80mm !important;
+                margin: 0 auto !important;
+                position: static !important;
+            }
+            #ticketPrintArea, #ticketPrintArea * {
+                animation: none !important;
+                transition: none !important;
+                opacity: 1 !important;
+                visibility: visible !important;
+                transform: none !important;
             }
             .kiosk-background-layer, .kiosk-background-overlay, .ambient-glow-1, .ambient-glow-2, header.kiosk-header, footer.kiosk-footer, main.kiosk-content, .modal-actions, #ticketChoiceCard, #confirmModalOverlay {
                 display: none !important;
@@ -721,6 +765,9 @@
                 backdrop-filter: none !important;
                 padding: 0 !important;
                 display: block !important;
+                height: auto !important;
+                min-height: 0 !important;
+                overflow: visible !important;
             }
             .receipt-container {
                 width: 100% !important;
@@ -732,8 +779,11 @@
                 display: block !important;
                 box-shadow: none !important;
                 border-radius: 0 !important;
-                padding: 10px !important;
+                padding: 3mm !important;
                 border: none !important;
+                margin: 0 !important;
+                transform: none !important;
+                animation: none !important;
             }
             .receipt-bank-name, .receipt-ticket-number {
                 color: #000000 !important;
@@ -1110,111 +1160,26 @@
         </form>
     </main>
 
-    <!-- Pre-Confirmation Modal (Pop up sebelum ambil tiket) -->
-    <div class="ticket-modal-overlay" id="confirmModalOverlay" style="display: none; z-index: 9999;">
-        <div class="receipt-container" style="max-width: 530px;">
-            <div class="receipt-paper" id="confirmPaper" style="padding: 28px 26px; text-align: center; border-top: 5px solid #004B9C;">
-                <h3 style="font-family: 'Inter', sans-serif; font-size: clamp(18px, 2.2vw, 21px); font-weight: 900; color: #002B49; margin-bottom: 22px; white-space: nowrap;">Konfirmasi Pengambilan Nomor Antrean</h3>
-
-                <div style="background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 18px; padding: 22px 20px; margin-bottom: 22px; text-align: center;">
-                    <!-- Baris 1: Layanan Dipilih (Center) -->
-                    <div style="margin-bottom: 16px;">
-                        <div style="font-size: 11.5px; text-transform: uppercase; color: #64748b; font-weight: 700; letter-spacing: 0.5px; margin-bottom: 3px;">Layanan Dipilih:</div>
-                        <div id="confirmServiceName" style="font-size: 18px; font-weight: 800; color: #002B49; font-family: 'Inter', sans-serif;">-</div>
-                    </div>
-
-                    <!-- Baris 2: Nomor Antrean (Center, Tanpa Garis) -->
-                    <div>
-                        <div style="font-size: 11.5px; text-transform: uppercase; color: #64748b; font-weight: 800; letter-spacing: 0.5px; margin-bottom: 4px;">Nomor Antrean:</div>
-                        <div id="confirmNextNumber" style="font-size: 38px; font-weight: 900; color: #004B9C; font-family: 'Inter', sans-serif; line-height: 1;">-</div>
-                    </div>
+    <!-- Hidden on screen; revealed only by the print stylesheet. -->
+    <div id="ticketPrintArea">
+        <div class="receipt-container">
+            <!-- Thermal ticket: uses the printer's configured paper width. -->
+            <div class="receipt-paper" id="receiptPaper">
+                <div class="thermal-header">
+                    <img class="thermal-bank-logo" src="{{ asset('images/bank-dp-taspen-logo.png') }}" alt="Bank DP Taspen" loading="eager">
+                    <div id="receiptBranchName" class="thermal-branch">{{ $branch->name }}</div>
+                    <div id="receiptBranchAddress" class="thermal-address" @if(!$branch->address) hidden @endif>{{ $branch->address }}</div>
+                    <div id="receiptBranchPhone" class="thermal-contact" @if(!$branch->phone || $branch->type !== 'Kantor Pusat') hidden @endif>@if($branch->phone && $branch->type === 'Kantor Pusat')Telp: {{ $branch->phone }}@endif</div>
                 </div>
-
-                <div style="display: flex; flex-direction: column; gap: 10px;">
-                    <button type="button" id="btnConfirmYes" onclick="onConfirmYesClicked()" class="btn-modal-digital" style="width: 100%; justify-content: center; background: linear-gradient(135deg, #059669 0%, #10b981 100%); font-size: 15px; padding: 16px; font-weight: 800; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 8px 20px -4px rgba(16, 185, 129, 0.4);">
-                        <x-heroicon-o-check-circle style="width: 20px; height: 20px;" />
-                        <span>Ya, Ambil Nomor Antrean</span>
-                    </button>
-                    <button type="button" id="btnConfirmCancel" onclick="closeConfirmModal()" class="btn-modal-cancel" style="width: 100%; justify-content: center;">
-                        <x-heroicon-o-x-circle style="width: 18px; height: 18px;" />
-                        <span>Batal / Kembali ke Menu</span>
-                    </button>
+                <div id="ticketModalDate" class="thermal-date">{{ now()->translatedFormat('l, d F Y') }} | {{ now()->format('H:i') }} WIB</div>
+                <div class="thermal-ticket">
+                    <div id="printReceiptServiceName" class="thermal-service">{{ session('ticket') && !str_starts_with(session('ticket'), 'T-') ? 'CUSTOMER SERVICE' : 'TELLER' }}</div>
+                    <div class="thermal-label">NOMOR ANTREAN</div>
+                    <div id="printReceiptNumber" class="thermal-number">{{ session('ticket') ?? 'T-001' }}</div>
                 </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Ticket Result Modal (Langsung Tampilkan Hasil Tiket Fisik Saja) -->
-    <div class="ticket-modal-overlay" id="ticketModalOverlay" style="{{ session('ticket') ? 'display: flex;' : 'display: none;' }}; z-index: 10001;">
-        <div class="receipt-container" style="max-width: 440px;">
-            <!-- Modal Card Utama: Menampilkan Hasil Struk Fisik -->
-            <div class="confirm-modal-paper" id="ticketChoiceCard" style="background: #ffffff; color: #0f172a; padding: 24px 20px; border-radius: 20px; box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7); text-align: center; border-top: 5px solid #004B9C;">
-                
-                <!-- Tampilan Struk Tiket Fisik (Identik dengan Hasil Cetak Struk Kertas) -->
-                <div id="ticketSuccessCard" style="display: block; padding: 2px 0;">
-                    <div style="background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 14px; padding: 22px 18px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05); margin-bottom: 16px; text-align: center;">
-                        <!-- 1. Header: Nomor Antrean & Tanggal -->
-                        <div style="margin-bottom: 12px; border-bottom: 1.5px dashed #000000; padding-bottom: 10px;">
-                            <div style="font-family: 'Inter', sans-serif; font-weight: 900; font-size: 22px; color: #000000; letter-spacing: 0.5px;">Nomor Antrean</div>
-                            <div id="digitalTicketDate" style="font-size: 11px; color: #333333; font-weight: 600; margin-top: 4px;">{{ now()->translatedFormat('l, d F Y') }} · {{ now()->format('H:i') }} WIB</div>
-                        </div>
-
-                        <!-- 2. Layanan, Label Nomor Antrean, & Nomor Tiket Besar -->
-                        <div style="margin: 12px 0;">
-                            <div id="digitalTicketServiceName" style="font-family: 'Inter', sans-serif; font-size: 17px; font-weight: 900; color: #000000; text-transform: uppercase; letter-spacing: 0.5px;">
-                                {{ session('ticket') ? (str_starts_with(session('ticket'), 'T-') ? 'TELLER' : 'CUSTOMER SERVICE') : 'TELLER' }}
-                            </div>
-                            <div style="font-size: 11px; letter-spacing: 1.2px; color: #333333; font-weight: 700; margin-top: 8px;">NOMOR ANTREAN</div>
-                            <div id="digitalTicketNumber" style="font-family: 'Inter', sans-serif; font-size: 60px; font-weight: 900; color: #000000; line-height: 1; letter-spacing: 2px; margin: 8px 0 10px;">
-                                {{ session('ticket') ?? 'T-001' }}
-                            </div>
-                        </div>
-
-                        <!-- 3. Footer: Pesan Menunggu & Terima Kasih -->
-                        <div style="border-top: 1.5px dashed #000000; padding-top: 10px; margin-top: 10px; font-size: 11px; color: #333333; font-weight: 600; line-height: 1.45;">
-                            <div>Silakan menunggu nomor Anda dipanggil.</div>
-                            <div style="margin-top: 3px;">Terima kasih atas kunjungan Anda</div>
-                        </div>
-                    </div>
-
-                    <!-- Tombol Aksi: Cetak Struk Kertas & Kembali ke Menu Utama -->
-                    <div style="display: flex; flex-direction: column; gap: 10px;">
-                        <button type="button" class="btn-modal-print" onclick="window.print()" style="width: 100%; justify-content: center; background: linear-gradient(135deg, #002B49, #004B9C); padding: 14px; font-weight: 800; border-radius: 14px; color: white; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 8px 20px -4px rgba(0, 43, 73, 0.4);">
-                            <x-heroicon-o-printer style="width: 20px; height: 20px;" />
-                            <span>Cetak Struk Kertas</span>
-                        </button>
-                        <button type="button" class="btn-modal-cancel" onclick="closeModal()" style="width: 100%; justify-content: center; font-weight: 800; padding: 13px;">
-                            <x-heroicon-o-home style="width: 18px; height: 18px;" />
-                            <span>Kembali ke Menu Utama</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Struk Cetak Thermal (Khusus untuk @media print, Tanpa Gambar Logo/Barcode) -->
-            <div class="receipt-paper" id="receiptPaper" style="display: none; text-align: center;">
-                <div class="receipt-header" style="margin-bottom: 8px; border-bottom: 1.5px dashed #000000; padding-bottom: 6px;">
-                    <div style="font-family: 'Inter', sans-serif; font-weight: 900; font-size: 15px; color: #000000; letter-spacing: 0.5px;">PT BPR DP TASPEN</div>
-                    <div id="receiptBranchName" style="font-family: 'Inter', sans-serif; font-weight: 800; font-size: 12px; color: #000000; text-transform: uppercase;">{{ $branch->name }}</div>
-                    @if($branch->address)
-                    <div id="receiptBranchAddress" style="font-size: 8.5px; color: #222222; margin-top: 2px; line-height: 1.2;">{{ $branch->address }}</div>
-                    @endif
-                    @if($branch->phone)
-                    <div id="receiptBranchPhone" style="font-size: 8.5px; color: #222222;">Telp: {{ $branch->phone }}</div>
-                    @endif
-                    <div id="ticketModalDate" style="font-size: 9.5px; color: #333333; font-weight: 600; margin-top: 4px;">{{ now()->translatedFormat('l, d F Y') }} · {{ now()->format('H:i') }} WIB</div>
-                </div>
-                <div style="margin-bottom: 4px;">
-                    <div id="printReceiptServiceName" style="font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 800; color: #000000; text-transform: uppercase;">TELLER</div>
-                </div>
-                <div style="margin: 6px 0;">
-                    <div style="font-size: 10px; letter-spacing: 1px; color: #333333; font-weight: 700;">NOMOR ANTREAN</div>
-                    <div id="printReceiptNumber" style="font-family: 'Inter', sans-serif; font-size: 46px; font-weight: 900; color: #000000; line-height: 1; letter-spacing: 2px; margin: 4px 0;">T-001</div>
-                </div>
-                <a id="ticketVerificationLink" @if(session('verification_url')) href="{{ session('verification_url') }}" @else hidden @endif style="font-size: 10px; overflow-wrap: anywhere;">{{ session('verification_url') }}</a>
-                <div class="receipt-footer" style="border-top: 1.5px dashed #000000; padding-top: 6px; margin-top: 8px; font-size: 9px; color: #333333; line-height: 1.3;">
+                <div class="thermal-footer">
                     <div>Silakan menunggu nomor Anda dipanggil.</div>
-                    <div style="margin-top: 2px;">Terima kasih atas kunjungan Anda</div>
+                    <div>Terima kasih atas kunjungan Anda.</div>
                 </div>
             </div>
         </div>
@@ -1237,6 +1202,7 @@
             document.getElementById('clockTime').textContent = `${hours}.${minutes} WIB`;
             document.getElementById('clockDate').textContent = now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
         }
+        updateClock();
         setInterval(updateClock, 1000);
         // Simpan kode cabang ke LocalStorage agar perangkat Kiosk ini selalu mengingat cabangnya
         try {
@@ -1244,8 +1210,11 @@
         } catch (e) {}
 
         // Real-time Live Polling via /api/display/data/{branch_code} (Every 4 seconds)
+        let isRefreshingQueueData = false;
         function refreshLiveQueueData() {
-            fetch("{{ url('/api/display/data/' . $branch->code) }}")
+            if (isRefreshingQueueData) return;
+            isRefreshingQueueData = true;
+            return fetch("{{ url('/api/display/data/' . $branch->code) }}", { signal: AbortSignal.timeout(15000) })
                 .then(res => res.json())
                 .then(data => {
                     if (!data) return;
@@ -1314,38 +1283,14 @@
                         csServingElem.textContent = latestCsCall || 'belum ada antrean';
                     }
                 })
-                .catch(err => console.debug('Live sync quiet fail:', err));
+                .catch(err => console.debug('Live sync quiet fail:', err))
+                .finally(() => { isRefreshingQueueData = false; });
         }
         setInterval(refreshLiveQueueData, 4000);
 
-        // Render Functional Barcode & QR Code for Ticket
-        function renderBarcodeForNumber(ticketNum) {
-            const svg = document.getElementById("ticketBarcode");
-            if (!svg || !ticketNum) return;
-            if (typeof JsBarcode === 'function') {
-                try {
-                    JsBarcode(svg, ticketNum, {
-                        format: "CODE128",
-                        lineColor: "#002B49",
-                        width: 2,
-                        height: 44,
-                        displayValue: true,
-                        fontSize: 11,
-                        fontOptions: "bold",
-                        font: "Plus Jakarta Sans",
-                        margin: 4
-                    });
-                    return;
-                } catch(e) { console.error(e); }
-            }
-            drawFallbackBarcode('ticketBarcode', ticketNum);
-        }
-
         @if(session('ticket'))
-            document.addEventListener("DOMContentLoaded", function() {
-                setTimeout(function() {
-                    renderBarcodeForNumber("{{ session('ticket') }}");
-                }, 100);
+            document.addEventListener('DOMContentLoaded', () => {
+                refreshLiveQueueData();
             });
         @endif
 
@@ -1371,7 +1316,6 @@
         }
 
         let isTakingTicket = false;
-        let autoCloseCountdownTimer = null;
 
         function playKioskTapTone() {
             try {
@@ -1416,8 +1360,31 @@
             const csrfToken = document.querySelector('input[name="_token"]')?.value 
                 || document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 
+            const pendingKey = 'ticket-request-{{ $branch->id }}';
+            let pending;
+            try {
+                pending = JSON.parse(sessionStorage.getItem(pendingKey) || 'null');
+                if (pending && pending.service !== serviceKey) {
+                    alert('Permintaan sebelumnya belum selesai. Tekan kembali tombol layanan sebelumnya untuk memeriksa nomor yang sama.');
+                    btn.innerHTML = originalHtml; btn.disabled = false; btn.style.opacity = '1'; isTakingTicket = false;
+                    return;
+                }
+                if (!pending) {
+                    const bytes = crypto.getRandomValues(new Uint8Array(16));
+                    bytes[6] = (bytes[6] & 15) | 64; bytes[8] = (bytes[8] & 63) | 128;
+                    const hex = [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
+                    pending = {service: serviceKey, request_id: `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`};
+                    sessionStorage.setItem(pendingKey, JSON.stringify(pending));
+                }
+            } catch (error) {
+                alert('Penyimpanan sesi browser tidak tersedia. Hubungi petugas sebelum mengambil tiket.');
+                btn.innerHTML = originalHtml; btn.disabled = false; btn.style.opacity = '1'; isTakingTicket = false;
+                return;
+            }
+
             fetch("{{ url('/ambil-nomor') }}", {
                 method: "POST",
+                signal: AbortSignal.timeout(20000),
                 headers: {
                     "Content-Type": "application/json",
                     "Accept": "application/json",
@@ -1425,21 +1392,23 @@
                 },
                 body: JSON.stringify({
                     service: serviceKey,
+                    request_id: pending.request_id,
                     branch_id: {{ $branch->id }}
                 })
             })
-            .then(res => res.json())
-            .then(data => {
+            .then(async res => ({status: res.status, data: await res.json()}))
+            .then(async ({status, data}) => {
                 if (data && data.success) {
-                    showPhysicalTicketResult(data.ticket, data);
+                    if (await printIssuedTicket(data.ticket, data)) sessionStorage.removeItem(pendingKey);
                     refreshLiveQueueData();
                 } else {
+                    if (data?.success === false || [403, 409, 419, 422].includes(status)) sessionStorage.removeItem(pendingKey);
                     alert(data?.message || 'Mohon maaf, layanan sedang sibuk. Silakan coba tekan tombol kembali.');
                 }
             })
             .catch(err => {
                 console.error("Gagal simpan antrean:", err);
-                alert('Mohon maaf, terjadi gangguan koneksi ke server loket. Silakan tekan tombol sekali lagi.');
+                alert('Koneksi terputus. Tekan layanan yang sama untuk memeriksa permintaan sebelumnya; nomor baru tidak dibuat otomatis.');
             })
             .finally(() => {
                 btn.innerHTML = originalHtml;
@@ -1449,104 +1418,25 @@
             });
         }
 
-        // Tampilkan struk fisik di layar & cetak kertas otomatis
-        function showPhysicalTicketResult(finalTicketNumber, data = null) {
-            const ticketOverlay = document.getElementById('ticketModalOverlay');
-            const sName = (data && data.service_name) ? data.service_name : (selectedServiceKey === 'teller' ? 'TELLER' : 'CUSTOMER SERVICE');
-
-            const digitalService = document.getElementById('digitalTicketServiceName');
-            const digitalNum = document.getElementById('digitalTicketNumber');
-            const printSName = document.getElementById('printReceiptServiceName');
-            const printNum = document.getElementById('printReceiptNumber');
-
-            if (digitalService) digitalService.textContent = sName;
-            if (digitalNum) digitalNum.textContent = finalTicketNumber;
-            if (printSName) printSName.textContent = sName;
-            if (printNum) printNum.textContent = finalTicketNumber;
-
-            const verificationLink = document.getElementById('ticketVerificationLink');
-            if (verificationLink) {
-                verificationLink.hidden = !data?.verification_url;
-                if (data?.verification_url) {
-                    verificationLink.href = data.verification_url;
-                    verificationLink.textContent = data.verification_url;
-                }
+        // Printing runs exclusively on the server. Polling never opens a PDF or browser print dialog.
+        async function printIssuedTicket(finalTicketNumber, data = null) {
+            let job = data?.print_job;
+            if (!job?.status_url) {
+                alert('Tiket ' + finalTicketNumber + ' sudah diterbitkan. Hubungi petugas untuk memeriksa cetaknya.');
+                return false;
             }
-
-            if (data) {
-                const branchNameEl = document.getElementById('receiptBranchName');
-                const branchAddressEl = document.getElementById('receiptBranchAddress');
-                const branchPhoneEl = document.getElementById('receiptBranchPhone');
-                const ticketDateEl = document.getElementById('ticketModalDate');
-
-                if (branchNameEl && data.branch_name) branchNameEl.textContent = data.branch_name;
-                if (branchAddressEl && data.branch_address) branchAddressEl.textContent = data.branch_address;
-                if (branchPhoneEl && data.branch_phone) branchPhoneEl.textContent = 'Telp: ' + data.branch_phone;
-                if (ticketDateEl && data.date_formatted) ticketDateEl.textContent = data.date_formatted;
+            const deadline = Date.now() + 70000;
+            while (['queued', 'processing'].includes(job.status) && Date.now() < deadline) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                try {
+                    const response = await fetch(job.status_url, {headers: {'Accept': 'application/json'}, signal: AbortSignal.timeout(10000)});
+                    if (response.ok) job = (await response.json()).print_job;
+                } catch (error) { /* Keep the same request; never issue a replacement. */ }
             }
-
-            if (ticketOverlay) {
-                ticketOverlay.style.display = 'flex';
-                ticketOverlay.style.opacity = '1';
-            }
-
-            // Otomatis cetak ke printer thermal kertas
-            try {
-                window.print();
-            } catch (e) {
-                console.log("Print:", e);
-            }
-
-            // Countdown 6 detik otomatis kembali ke layar utama
-            let remainingSeconds = 6;
-            const cancelBtn = document.querySelector('.btn-modal-cancel span');
-            if (autoCloseCountdownTimer) clearInterval(autoCloseCountdownTimer);
-            autoCloseCountdownTimer = setInterval(() => {
-                remainingSeconds--;
-                if (cancelBtn) {
-                    cancelBtn.textContent = `Kembali ke Layar Utama (${remainingSeconds}s)`;
-                }
-                if (remainingSeconds <= 0) {
-                    clearInterval(autoCloseCountdownTimer);
-                    closeModal();
-                }
-            }, 1000);
+            if (job.status === 'submitted') return true;
+            alert('Tiket ' + finalTicketNumber + ': ' + (['failed', 'unknown', 'expired'].includes(job.status) ? job.message : 'Status cetak belum dapat dipastikan. Hubungi petugas atau tekan layanan yang sama untuk memeriksa nomor ini.'));
+            return ['failed', 'unknown', 'expired'].includes(job.status);
         }
-
-        function closeModal() {
-            if (autoCloseCountdownTimer) clearInterval(autoCloseCountdownTimer);
-            const ticketOverlay = document.getElementById('ticketModalOverlay');
-            if (ticketOverlay) {
-                ticketOverlay.style.display = 'none';
-            }
-            const cancelBtn = document.querySelector('.btn-modal-cancel span');
-            if (cancelBtn) {
-                cancelBtn.textContent = 'Kembali ke Menu Utama';
-            }
-        }
-
-        // URL preview handlers for testing modal & loading screen
-        document.addEventListener("DOMContentLoaded", function() {
-            const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.has('preview_confirm')) {
-                showConfirmModal('teller', 'Teller (Setoran, Penarikan, Transaksi Tunai)', 'Loket 1 / 2', '', 'T-005');
-            } else if (urlParams.has('preview_ya')) {
-                showConfirmModal('teller', 'Teller (Setoran, Penarikan, Transaksi Tunai)', 'Loket 1 / 2', '', 'T-005');
-                onConfirmYesClicked();
-            } else if (urlParams.has('preview_ticket')) {
-                selectedServiceKey = 'cs';
-                selectedServiceLabel = 'Customer Service & Kredit Pensiun';
-                selectedCounterName = 'Loket CS - Kredit & Pensiun';
-                selectedNextNumber = 'CS-014';
-                showPhysicalTicketResult('CS-014');
-            } else if (urlParams.has('preview_digital') || urlParams.has('preview_loading')) {
-                selectedServiceKey = 'teller';
-                selectedServiceLabel = 'Teller (Setoran, Penarikan, Transaksi Tunai)';
-                selectedCounterName = 'Loket 1 / 2';
-                selectedNextNumber = 'T-019';
-                showPhysicalTicketResult('T-019');
-            }
-        });
     </script>
 
     <!-- Blade Heroicon Templates (No Hardcoded SVGs) -->

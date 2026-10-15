@@ -28,6 +28,7 @@ class ManageQueues extends ManageRecords
                 ->action(function () {
                     $user = auth()->user();
                     if ($user?->serviceSetting) {
+                        abort_unless($user->can('update', $user->serviceSetting), 403);
                         $newStatus = ! $user->serviceSetting->is_active;
                         $user->serviceSetting->update(['is_active' => $newStatus]);
                         Notification::make()
@@ -37,10 +38,16 @@ class ManageQueues extends ManageRecords
                             ->send();
                     }
                 })
-                ->visible(fn () => ! auth()->user()?->hasRole('admin') && auth()->user()?->serviceSetting !== null),
+                ->visible(fn () => ! auth()->user()?->hasRole('admin') && auth()->user()?->serviceSetting !== null
+                    && auth()->user()->can('update', auth()->user()->serviceSetting)),
 
             CreateAction::make()
                 ->label('Tambah Antrean Manual')
+                ->mutateFormDataUsing(fn (array $data): array => array_replace($data, ['status' => \App\Enums\QueueStatus::WAITING]))
+                ->after(fn (\App\Models\Queue $record) => \App\Models\QueueLog::create([
+                    'queue_id' => $record->id, 'branch_id' => $record->branch_id,
+                    'actor_id' => auth()->id(), 'action' => 'created', 'payload' => ['source' => 'manual'],
+                ]))
                 ->visible(fn () => auth()->user()?->hasRole('admin') ?? false),
         ];
     }

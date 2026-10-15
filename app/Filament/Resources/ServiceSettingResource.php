@@ -77,7 +77,7 @@ class ServiceSettingResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            Section::make('Konfigurasi Loket Layanan')
+            Section::make('Konfigurasi Loket Layanan')->columnSpanFull()
                 ->description('Pengaturan loket tugas teller dan CS per kantor cabang.')
                 ->schema([
                     Select::make('branch_id')
@@ -101,6 +101,10 @@ class ServiceSettingResource extends Resource
                     TextInput::make('counter_name')
                         ->label(fn () => __('app.counter_name'))
                         ->placeholder('Contoh: Loket Teller 01')
+                        ->rules(fn (\Filament\Schemas\Components\Utilities\Get $get, ?ServiceSetting $record) => [
+                            \Illuminate\Validation\Rule::unique('service_settings', 'counter_name')
+                                ->where('branch_id', $get('branch_id'))->ignore($record?->id),
+                        ])
                         ->required(),
                     Toggle::make('is_active')
                         ->label(fn () => __('app.operational_status'))
@@ -126,7 +130,10 @@ class ServiceSettingResource extends Resource
                     ->relationship('branch', 'name')
                     ->visible($isAdmin),
             ])
-            ->recordActions([EditAction::make(), DeleteAction::make()]);
+            ->recordActions([EditAction::make(), DeleteAction::make()
+                        ->disabled(fn ($record) => \App\Services\IntegrityRules::deletionReason($record) !== null)
+                        ->tooltip(fn ($record) => \App\Services\IntegrityRules::deletionReason($record))
+                        ->before(fn ($record, DeleteAction $action) => \App\Services\IntegrityRules::beforeDelete($record, $action))]);
     }
 
     public static function getEloquentQuery(): Builder
@@ -140,6 +147,8 @@ class ServiceSettingResource extends Resource
 
         if ($user->branch_id) {
             $query->where('branch_id', $user->branch_id);
+        } else {
+            $query->whereNull('branch_id');
         }
 
         if ($user->service_setting_id) {

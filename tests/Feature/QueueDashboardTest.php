@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Branch;
 use App\Models\Queue;
 use App\Models\ServiceSetting;
 use App\Models\User;
@@ -14,20 +15,27 @@ class QueueDashboardTest extends TestCase
 {
     use RefreshDatabase;
 
+    private Branch $branch;
+
     protected function setUp(): void
     {
         parent::setUp();
         $this->seed(RoleAndPermissionSeeder::class);
+        $this->travelTo(\Carbon\Carbon::parse('2026-10-14 09:00:00', 'Asia/Jakarta'));
+        $this->branch = Branch::create([
+            'code' => '001', 'slug' => 'pusat', 'name' => 'Kantor Pusat',
+            'type' => 'Kantor Pusat', 'is_active' => true,
+        ]);
     }
 
     #[Test]
     public function test_teller_can_call_the_next_teller_queue(): void
     {
-        $tellerSetting = ServiceSetting::create(['label' => 'Loket Teller', 'counter_name' => 'Loket Teller', 'service' => 'teller', 'is_active' => true]);
-        $teller = User::factory()->create(['service_setting_id' => $tellerSetting->id]);
+        $tellerSetting = ServiceSetting::create(['branch_id' => $this->branch->id, 'label' => 'Loket Teller', 'counter_name' => 'Loket Teller', 'service' => 'teller', 'is_active' => true]);
+        $teller = User::factory()->create(['is_active' => true, 'branch_id' => $this->branch->id, 'service_setting_id' => $tellerSetting->id]);
         $teller->assignRole('teller');
 
-        $queue = Queue::create(['number' => 'T-001', 'service_setting_id' => $tellerSetting->id, 'status' => 'waiting']);
+        $queue = Queue::create(['branch_id' => $this->branch->id, 'number' => 'T-001', 'service_setting_id' => $tellerSetting->id, 'status' => 'waiting']);
 
         $this->actingAs($teller)->post(route('queue.next.teller'))->assertRedirect();
 
@@ -41,7 +49,7 @@ class QueueDashboardTest extends TestCase
     #[Test]
     public function test_cs_cannot_open_teller_dashboard(): void
     {
-        $cs = User::factory()->create();
+        $cs = User::factory()->create(['is_active' => true, 'branch_id' => $this->branch->id]);
         $cs->assignRole('cs');
 
         $this->actingAs($cs)->get(route('teller.dashboard'))->assertForbidden();
@@ -50,7 +58,7 @@ class QueueDashboardTest extends TestCase
     #[Test]
     public function test_visitor_can_take_a_teller_number(): void
     {
-        $tellerSetting = ServiceSetting::create(['label' => 'Loket Teller', 'counter_name' => 'Loket Teller', 'service' => 'teller', 'is_active' => true]);
+        $tellerSetting = ServiceSetting::create(['branch_id' => $this->branch->id, 'label' => 'Loket Teller', 'counter_name' => 'Loket Teller', 'service' => 'teller', 'is_active' => true]);
 
         $this->post(route('queue.store-number'), ['service' => 'teller'])
             ->assertSessionHas('ticket', 'T-001');
@@ -65,8 +73,8 @@ class QueueDashboardTest extends TestCase
     #[Test]
     public function test_queue_sequence_above_999_increments_correctly(): void
     {
-        $tellerSetting = ServiceSetting::create(['label' => 'Loket Teller', 'counter_name' => 'Loket Teller', 'service' => 'teller', 'is_active' => true]);
-        Queue::create(['number' => 'T-999', 'service_setting_id' => $tellerSetting->id, 'status' => 'waiting']);
+        $tellerSetting = ServiceSetting::create(['branch_id' => $this->branch->id, 'label' => 'Loket Teller', 'counter_name' => 'Loket Teller', 'service' => 'teller', 'is_active' => true]);
+        Queue::create(['branch_id' => $this->branch->id, 'number' => 'T-999', 'service_setting_id' => $tellerSetting->id, 'status' => 'waiting']);
 
         $this->post(route('queue.store-number'), ['service' => 'teller'])
             ->assertSessionHas('ticket', 'T-1000');

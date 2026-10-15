@@ -14,7 +14,7 @@ class QueuePolicy
 
     public function view(User $user, Queue $queue): bool
     {
-        return $user->can('view_any_queue');
+        return $user->can('view_any_queue') && $this->sameService($user, $queue);
     }
 
     public function create(User $user): bool
@@ -24,11 +24,28 @@ class QueuePolicy
 
     public function update(User $user, Queue $queue): bool
     {
-        return $user->can('edit_queue');
+        return $user->can('edit_queue') && $this->sameService($user, $queue)
+            && $user->serviceSetting?->is_active && $user->branch?->is_active
+            && (! in_array($queue->status, [\App\Enums\QueueStatus::CALLED, \App\Enums\QueueStatus::SERVING], true)
+                || (int) $queue->served_by === (int) $user->id);
     }
 
     public function delete(User $user, Queue $queue): bool
     {
-        return $user->can('delete_queue');
+        return false;
+    }
+
+    public function print(User $user, Queue $queue): bool
+    {
+        return $user->is_active && $user->can('edit_queue') && $this->sameService($user, $queue)
+            && $user->branch?->is_active && $user->serviceSetting?->is_active;
+    }
+
+    private function sameService(User $user, Queue $queue): bool
+    {
+        return $user->branch_id && (int) $user->branch_id === (int) $queue->branch_id
+            && $user->serviceSetting && $queue->serviceSetting
+            && (int) $user->serviceSetting->branch_id === (int) $user->branch_id
+            && $user->serviceSetting->service === $queue->serviceSetting->service;
     }
 }

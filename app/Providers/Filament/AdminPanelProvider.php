@@ -15,8 +15,6 @@ use Filament\Navigation\NavigationGroup;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
-use Filament\Support\Enums\Width;
-use Filament\Support\Facades\FilamentView;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
@@ -32,9 +30,9 @@ class AdminPanelProvider extends PanelProvider
         return $panel
             ->default()
             ->id('admin')
+            ->databaseTransactions()
             ->path('admin')
             ->viteTheme('resources/css/filament/admin/theme.css')
-            ->maxContentWidth(Width::Full)
             ->brandName('Sistem Antrean Bank - PT BPR DP TASPEN')
             ->brandLogo(asset('images/logo.png?v=2'))
             ->darkModeBrandLogo(asset('images/logo-dark.png?v=2'))
@@ -42,8 +40,7 @@ class AdminPanelProvider extends PanelProvider
             ->login()
             ->darkMode(true)
             ->globalSearchKeybindings(['command+k', 'ctrl+k'])
-            ->databaseNotifications(fn () => auth()->check() && auth()->user()?->hasRole('admin'))
-            ->databaseNotificationsPolling(fn () => (auth()->check() && auth()->user()?->hasRole('admin')) ? '15s' : null)
+            ->databaseNotifications(false)
             ->collapsibleNavigationGroups(false)
             ->navigationGroups([
                 NavigationGroup::make()
@@ -64,10 +61,12 @@ class AdminPanelProvider extends PanelProvider
                     ->icon(Heroicon::OutlinedTv),
                 MenuItem::make()
                     ->label('Konsol Customer Service')
+                    ->visible(fn () => auth()->user()?->hasRole('cs') ?? false)
                     ->url('/dashboard/cs')
                     ->icon(Heroicon::OutlinedUserGroup),
                 MenuItem::make()
                     ->label('Konsol Teller')
+                    ->visible(fn () => auth()->user()?->hasRole('teller') ?? false)
                     ->url('/dashboard/teller')
                     ->icon(Heroicon::OutlinedBanknotes),
             ])
@@ -101,16 +100,4 @@ class AdminPanelProvider extends PanelProvider
             ]);
     }
 
-    public function boot(): void
-    {
-        FilamentView::registerRenderHook(
-            'panels::body.end',
-            function (): string {
-                $isAdmin = auth()->check() && auth()->user()?->hasRole('admin');
-                $display = $isAdmin ? 'inline-flex' : 'none !important';
-
-                return '<style>.fi-topbar-database-notifications-btn { display: '.$display.'; }</style>';
-            }
-        );
-    }
 }

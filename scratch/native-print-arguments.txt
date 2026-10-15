@@ -1,0 +1,7 @@
+-new-window
+-print-to
+ITPRINTER (L6290 Series)
+-silent
+-print-settings
+noscale,1x,simplex
+D:\xampp\htdocs\sistem-antrian-bank\scratch\native-print-test.pdf

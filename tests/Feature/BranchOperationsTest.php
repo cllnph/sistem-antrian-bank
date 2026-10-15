@@ -20,6 +20,7 @@ class BranchOperationsTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->travelTo(\Carbon\Carbon::parse('2026-10-14 09:00:00', 'Asia/Jakarta'));
         $this->seed(DatabaseSeeder::class);
     }
 

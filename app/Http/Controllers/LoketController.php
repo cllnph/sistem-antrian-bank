@@ -35,8 +35,8 @@ class LoketController extends Controller
         $request->merge(['branch_id' => $request->input('branch_id') ?? auth()->user()->branch_id]);
         $validated = $request->validate([
             'branch_id' => ['required', 'integer', 'exists:branches,id'],
-            'counter_name' => ['required', 'string', 'max:255', 'unique:service_settings,counter_name'],
-            'service' => ['required', 'string', 'max:255'],
+            'counter_name' => ['required', 'string', 'max:255', Rule::unique('service_settings', 'counter_name')->where('branch_id', $request->input('branch_id'))],
+            'service' => ['required', Rule::in(['cs', 'teller', 'umum'])],
             'label' => ['nullable', 'string', 'max:255'],
             'is_active' => ['nullable', 'boolean'],
         ]);
@@ -66,8 +66,8 @@ class LoketController extends Controller
             $request->merge(['branch_id' => $request->input('branch_id') ?? auth()->user()->branch_id]);
             $validated = $request->validate([
                 'branch_id' => ['required', 'integer', 'exists:branches,id'],
-                'counter_name' => ['required', 'string', 'max:255', 'unique:service_settings,counter_name'],
-                'service' => ['required', 'string', 'max:255'],
+                'counter_name' => ['required', 'string', 'max:255', Rule::unique('service_settings', 'counter_name')->where('branch_id', $request->input('branch_id'))],
+                'service' => ['required', Rule::in(['cs', 'teller', 'umum'])],
                 'label' => ['nullable', 'string', 'max:255'],
                 'is_active' => ['nullable', 'boolean'],
             ]);
@@ -102,9 +102,10 @@ class LoketController extends Controller
         } catch (HttpException $e) {
             throw $e;
         } catch (\Exception $e) {
+            report($e);
             return response()->json([
                 'success' => false,
-                'message' => 'Terjadi kesalahan sistem: '.$e->getMessage(),
+                'message' => 'Terjadi kesalahan sistem. Silakan coba kembali.',
             ], 500);
         }
     }
@@ -121,8 +122,8 @@ class LoketController extends Controller
         }
 
         $validated = $request->validate([
-            'counter_name' => ['required', 'string', 'max:255', Rule::unique('service_settings')->ignore($loket->id)],
-            'service' => ['required', 'string', 'max:255'],
+            'counter_name' => ['required', 'string', 'max:255', Rule::unique('service_settings', 'counter_name')->where('branch_id', $loket->branch_id)->ignore($loket->id)],
+            'service' => ['required', Rule::in(['cs', 'teller', 'umum'])],
             'label' => ['nullable', 'string', 'max:255'],
         ]);
 
@@ -165,9 +166,6 @@ class LoketController extends Controller
         }
 
         $counterName = $loket->counter_name;
-
-        // Unassign users from this counter desk before deleting
-        User::where('service_setting_id', $loket->id)->update(['service_setting_id' => null]);
 
         $loket->delete();
 

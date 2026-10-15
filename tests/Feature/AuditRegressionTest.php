@@ -99,7 +99,8 @@ class AuditRegressionTest extends TestCase
         $setting = ServiceSetting::create(['branch_id' => $first->id, 'service' => 'teller', 'counter_name' => 'Teller', 'label' => 'Teller', 'is_active' => true]);
         $ticket = Queue::create(['branch_id' => $first->id, 'number' => 'T-001', 'service_setting_id' => $setting->id, 'status' => 'waiting']);
         $ticket->forceFill(['created_at' => now()->subDay()])->save();
-        Queue::create(['branch_id' => $second->id, 'number' => 'T-001', 'service_setting_id' => $setting->id, 'status' => 'waiting']);
+        $secondSetting = ServiceSetting::create(['branch_id' => $second->id, 'service' => 'teller', 'counter_name' => 'Teller', 'label' => 'Teller', 'is_active' => true]);
+        Queue::create(['branch_id' => $second->id, 'number' => 'T-001', 'service_setting_id' => $secondSetting->id, 'status' => 'waiting']);
 
         $this->get(route('queue.verify', ['queueId' => $ticket->id]))->assertOk()
             ->assertViewHas('queue', fn ($queue) => $queue->id === $ticket->id);

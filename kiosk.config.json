@@ -1,0 +1,6 @@
+{
+    "url": "http://192.168.11.60:7100/ambil-nomor",
+    "printer_name": "ITPRINTER (L6290 Series)",
+    "paper": { "width_mm": 80, "height_mm": 150 },
+    "branch_printers": {}
+}

@@ -6,7 +6,7 @@ use App\Models\Branch;
 use App\Models\ServiceSetting;
 use App\Models\User;
 use Illuminate\Database\Seeder;
-use Spatie\Permission\Models\Role;
+use App\Models\Role;
 
 class DatabaseSeeder extends Seeder
 {

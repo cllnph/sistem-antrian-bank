@@ -45,7 +45,7 @@ class AdminPanelTest extends TestCase
         $admin->assignRole('admin');
 
         $this->actingAs($admin)->get('/admin')
-            ->assertOk();
+            ->assertRedirect('/admin/operasional-cabang');
     }
 
     #[Test]

@@ -14,7 +14,7 @@ use Filament\Resources\Pages\ManageRecords;
 use Filament\Schemas\Components\Section;
 use Filament\Support\Icons\Heroicon;
 use Spatie\Permission\Models\Permission;
-use Spatie\Permission\Models\Role;
+use App\Models\Role;
 
 class ManageUsers extends ManageRecords
 {
@@ -48,13 +48,7 @@ class ManageUsers extends ManageRecords
                         ->placeholder('Cari atau pilih peran...')
                         ->searchable()
                         ->preload()
-                        ->options(fn () => Role::all()->pluck('name', 'id')->map(fn ($name) => match ($name) {
-                            'cs' => __('app.role_cs'),
-                            'teller' => __('app.role_teller'),
-                            'admin' => __('app.role_admin'),
-                            'supervisor' => __('app.role_supervisor'),
-                            default => ucfirst(str_replace('_', ' ', $name)),
-                        }))
+                        ->options(fn () => Role::all()->mapWithKeys(fn ($role) => [$role->id => $role->display_name]))
                         ->reactive()
                         ->afterStateUpdated(function ($state, $set) {
                             if ($state) {
@@ -98,6 +92,7 @@ class ManageUsers extends ManageRecords
                         }),
 
                     Section::make('1. Panel & Akses Sistem')
+                        ->columnSpanFull()
                         ->description('Kontrol hak masuk ke panel admin dan konsol operasional petugas.')
                         ->schema([
                             CheckboxList::make('perm_system')
@@ -112,6 +107,7 @@ class ManageUsers extends ManageRecords
                         ]),
 
                     Section::make('2. Manajemen Pengguna')
+                        ->columnSpanFull()
                         ->description('Hak pengelolaan data dan pembuatan akun pengguna.')
                         ->schema([
                             CheckboxList::make('perm_user')
@@ -127,6 +123,7 @@ class ManageUsers extends ManageRecords
                         ]),
 
                     Section::make('3. Manajemen Antrean')
+                        ->columnSpanFull()
                         ->description('Hak pemanggilan, pembuatan, dan pengeditan tiket antrean.')
                         ->schema([
                             CheckboxList::make('perm_queue')
@@ -143,6 +140,7 @@ class ManageUsers extends ManageRecords
                         ]),
 
                     Section::make('4. Pengaturan Loket')
+                        ->columnSpanFull()
                         ->description('Pengaturan status buka/tutup dan nama loket perbankan.')
                         ->schema([
                             CheckboxList::make('perm_counter')
@@ -156,6 +154,7 @@ class ManageUsers extends ManageRecords
                         ]),
 
                     Section::make('5. Kontrol & Laporan Operasional')
+                        ->columnSpanFull()
                         ->description('Akses ke dasbor pusat kendali dan laporan aktivitas.')
                         ->schema([
                             CheckboxList::make('perm_report')
@@ -200,7 +199,7 @@ class ManageUsers extends ManageRecords
                             $recipients = User::where('is_active', true)->get();
                             Notification::make()
                                 ->title('Hak Akses Role Berhasil Diperbarui')
-                                ->body('Hak akses untuk role '.ucfirst(str_replace('_', ' ', $role->name)).'telah disimpan ke database oleh '.auth()->user()?->name)
+                                ->body('Hak akses untuk role '.$role->display_name.' telah disimpan ke database oleh '.auth()->user()?->name)
                                 ->success()
                                 ->send()
                                 ->sendToDatabase($recipients);

@@ -780,7 +780,7 @@
             </span>
             <span class="ticker-item">
                 <x-heroicon-o-building-office-2 class="kiosk-icon text-gold" />
-                <span id="tickerBranchInfo"><strong>{{ strtoupper($branch->name) }}:</strong> {{ $branch->address }} (Telp: {{ $branch->phone }})</span>
+                <span id="tickerBranchInfo"><strong>{{ strtoupper($branch->name) }}:</strong> {{ $branch->address }}@if($branch->phone) (Telp: {{ $branch->phone }})@endif</span>
             </span>
             <span class="ticker-item">
                 <x-heroicon-o-bell-alert class="kiosk-icon text-gold" />
@@ -1087,6 +1087,12 @@
             }
         }
 
+        function escapeDisplayText(value) {
+            const element = document.createElement('span');
+            element.textContent = String(value ?? '');
+            return element.innerHTML.replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+        }
+
         let isFetching = false;
         async function refreshData() {
             if (isFetching) return;
@@ -1161,13 +1167,13 @@
                     return `
                         <div id="card-${c.id}" class="service-card ${calling ? 'is-calling' : ''}">
                             <div class="card-top">
-                                <h3 class="counter-name" title="${c.counter_name}">${c.counter_name}</h3>
+                                <h3 class="counter-name" title="${escapeDisplayText(c.counter_name)}">${escapeDisplayText(c.counter_name)}</h3>
                             </div>
 
                             <!-- Hero Ticket Box: Nomor Antrean Dipanggil -->
                             <div class="hero-ticket-box ${hasActiveNumber ? 'has-ticket' : 'is-empty'} ${calling ? 'is-calling' : ''}">
                                 <span class="hero-ticket-label">Nomor Antrean Dipanggil</span>
-                                <div class="hero-ticket-number ${hasActiveNumber ? '' : 'text-empty'}">${displayCurrentNumber}</div>
+                                <div class="hero-ticket-number ${hasActiveNumber ? '' : 'text-empty'}">${escapeDisplayText(displayCurrentNumber)}</div>
                             </div>
 
                             <!-- Queue Status Board: Antrean Menunggu & Antrean Berikutnya -->
@@ -1175,14 +1181,14 @@
                                 <div class="status-row">
                                     <span class="status-label">Antrean Menunggu</span>
                                     <div class="status-value-wrap">
-                                        <span class="status-number">${c.waiting_count}</span>
+                                        <span class="status-number">${escapeDisplayText(c.waiting_count)}</span>
                                         <span class="status-unit">Orang</span>
                                     </div>
                                 </div>
                                 <div class="status-divider"></div>
                                 <div class="status-row">
                                     <span class="status-label">Antrean Berikutnya</span>
-                                    <span class="next-ticket-badge ${hasNextNumber ? 'has-next' : 'is-empty'}">${displayNextNumber}</span>
+                                    <span class="next-ticket-badge ${hasNextNumber ? 'has-next' : 'is-empty'}">${escapeDisplayText(displayNextNumber)}</span>
                                 </div>
                             </div>
                         </div>

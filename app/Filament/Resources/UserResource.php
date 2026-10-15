@@ -85,6 +85,7 @@ class UserResource extends Resource
     {
         return $schema->components([
             Section::make('Informasi Akun & Penempatan Tugas')
+                ->columnSpanFull()
                 ->description('Kelola profil pengguna, unit kerja kantor cabang, peran, dan kredensial akses.')
                 ->schema([
                     TextInput::make('name')
@@ -110,17 +111,21 @@ class UserResource extends Resource
                         ->required(),
                     Select::make('roles')
                         ->label(fn () => __('app.role'))
-                        ->relationship('roles', 'name', modifyQueryUsing: fn (Builder $query) => $query->when(auth()->user()?->hasRole('admin_cabang'), fn (Builder $query) => $query->whereIn('name', ['cs', 'teller'])))
+                        ->relationship('roles', 'display_name', modifyQueryUsing: fn (Builder $query) => $query->when(auth()->user()?->hasRole('admin_cabang'), fn (Builder $query) => $query->whereIn('name', ['cs', 'teller'])))
+                        ->saveRelationshipsUsing(function (Select $component, User $record, $state): void {
+                            try {
+                                $record->syncRoles(\App\Models\Role::findOrFail($state));
+                            } catch (\Illuminate\Validation\ValidationException $exception) {
+                                $prefix = (string) str($component->getStatePath())->beforeLast('.');
+                                throw \Illuminate\Validation\ValidationException::withMessages(
+                                    collect($exception->errors())->mapWithKeys(fn ($messages, $field) => [$prefix.'.'.$field => $messages])->all()
+                                );
+                            }
+                        })
                         ->rules(fn () => auth()->user()?->hasRole('admin_cabang') ? [Rule::exists('roles', 'id')->whereIn('name', ['cs', 'teller'])] : [])
                         ->preload()
-                        ->searchable()
-                        ->getOptionLabelFromRecordUsing(fn ($record) => match ($record->name) {
-                            'cs' => 'Customer Service',
-                            'teller' => 'Teller',
-                            'admin' => 'Administrator',
-                            'admin_cabang' => 'Admin Cabang',
-                            default => ucfirst(str_replace('_', ' ', $record->name)),
-                        })
+                        ->searchable(['display_name', 'name'])
+                        ->getOptionLabelFromRecordUsing(fn ($record) => $record->display_name)
                         ->required(),
                     Select::make('service_setting_id')
                         ->label('Loket / Counter Tugas')
@@ -156,22 +161,8 @@ class UserResource extends Resource
                     ->weight('bold')
                     ->wrap(),
 
-                TextColumn::make('roles.name')
-                    ->label(fn () => __('app.role'))
-                    ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'cs' => 'success',
-                        'teller' => 'info',
-                        'admin' => 'warning',
-                        default => 'gray',
-                    })
-                    ->formatStateUsing(fn (string $state) => match ($state) {
-                        'cs' => 'Customer Service',
-                        'teller' => 'Teller',
-                        'admin' => 'Administrator',
-                        'admin_cabang' => 'Admin Cabang',
-                        default => ucfirst(str_replace('_', ' ', $state)),
-                    }),
+                TextColumn::make('roles.display_name')
+                    ->label(fn () => __('app.role'))->badge(),
 
                 TextColumn::make('branch.name')
                     ->label('Kantor Cabang')
@@ -220,7 +211,10 @@ class UserResource extends Resource
                         ->redirectTo(fn () => route('filament.admin.resources.queues.index'))
                         ->backTo(fn () => route('filament.admin.resources.users.index')),
                     EditAction::make(),
-                    DeleteAction::make(),
+                    DeleteAction::make()
+                        ->disabled(fn ($record) => \App\Services\IntegrityRules::deletionReason($record) !== null)
+                        ->tooltip(fn ($record) => \App\Services\IntegrityRules::deletionReason($record))
+                        ->before(fn ($record, DeleteAction $action) => \App\Services\IntegrityRules::beforeDelete($record, $action)),
                 ])->label('Tindakan'),
             ]);
     }
