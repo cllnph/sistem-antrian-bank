@@ -1,8 +1,12 @@
 ﻿# Cetak tiket langsung melalui server
 
-Buka `http://192.168.11.60:7100/ambil-nomor` dari tab Edge biasa. Tekan **Ambil Tiket** pada Customer Service atau Teller. Server menerbitkan nomor, membuat PDF privat, lalu mengirim satu salinan ke printer. Tidak ada preview browser, pemilihan printer, tab PDF, atau tombol Print tambahan. Shortcut Desktop tetap tersedia sebagai cara cepat membuka URL; cetak tidak bergantung pada shortcut.
+Sejak 27 Oktober 2026, browser baru memakai **Printer PC ini**: buka kiosk, tekan **Ambil Tiket**, lalu pilih printer lokal pada dialog cetak. Tidak perlu installer untuk cara ini. Jika dialog dibatalkan, gunakan **Cetak tiket terakhir** untuk nomor yang sama. Aplikasi tidak dapat memastikan kertas keluar hanya dari penutupan dialog.
+
+Panduan di bawah khusus jalur **server**. Untuk menggunakannya, admin membuka **Dashboard → cabang yang sesuai → Cetak & Printer → Lainnya → Lanjutan: printer server**. Browser tersebut kemudian meminta server membuat PDF privat dan mengirim satu salinan ke printer server tanpa dialog. Browser lain tetap mencetak lokal. Untuk printer otomatis pada masing-masing PC, ikuti [panduan penghubung](PANDUAN-PENGHUBUNG-CABANG.md).
 
 ## Kesiapan server
+
+Untuk aplikasi pusat yang dideploy online dengan printer berbeda pada PC masing-masing cabang, penghubung tersedia melalui menu **Cetak & Printer** pada setiap cabang. Ikuti [panduan penghubung cabang](PANDUAN-PENGHUBUNG-CABANG.md). Panduan di bawah menjelaskan jalur cetak server lokal yang tetap tersedia.
 
 Layanan cetak dan shortcut Startup sudah dipasang pada PC server ini. Worker berjalan tersembunyi sebagai pengguna Windows yang memasang printer, dimulai sekarang dan otomatis ketika pengguna tersebut login. PC server dan aplikasi harus tetap hidup; pengguna Windows pemilik printer harus sudah login. Menutup Edge tidak menghentikan worker.
 

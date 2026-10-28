@@ -1,0 +1,8 @@
+{
+  "official_installer": "passed",
+  "dpapi_and_acl": "passed",
+  "hidden_startup_registered_and_removed": "passed",
+  "real_printer_status_heartbeat": "passed",
+  "native_enable_and_revoke": "passed",
+  "physical_print": "not sent; test agent had no jobs"
+}

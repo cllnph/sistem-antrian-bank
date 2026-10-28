@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Enums\QueueStatus;
 use App\Models\Branch;
+use App\Models\KioskDeviceEvent;
+use App\Models\PrintAgent;
 use App\Models\Queue;
 use App\Models\QueueLog;
 use App\Models\ServiceSetting;
@@ -26,7 +28,7 @@ class IntegrityRules
 
     public static function activeWork(User $user): bool
     {
-        return Queue::withoutGlobalScopes()->where('served_by', $user->id)
+        return Queue::withoutGlobalScopes()->currentPeriod()->where('served_by', $user->id)
             ->whereIn('status', [QueueStatus::CALLED, QueueStatus::SERVING])->exists();
     }
 
@@ -40,6 +42,9 @@ class IntegrityRules
 
     public static function deletionReason(Model $record): ?string
     {
+        if ($record instanceof Branch && \Illuminate\Support\Facades\DB::table('ticket_request_tombstones')->where('branch_id', $record->id)->exists()) {
+            return 'Bukti teknis permintaan masih disimpan selama tujuh hari. Nonaktifkan cabang terlebih dahulu.';
+        }
         if ($record instanceof Role) {
             if (self::isSystemRole($record)) {
                 return 'Peran sistem admin, admin_cabang, cs, dan teller tidak dapat dihapus.';
@@ -52,6 +57,12 @@ class IntegrityRules
             || $record->users()->exists() || $record->queues()->withoutGlobalScopes()->exists()
             || $record->queueLogs()->exists())) {
             return 'Kantor masih memiliki loket, akun, atau riwayat antrean. Kantor tidak dapat dihapus.';
+        }
+        if ($record instanceof Branch && PrintAgent::withTrashed()->where('branch_id', $record->id)->exists()) {
+            return 'Kantor memiliki penghubung cetak yang tercatat. Nonaktifkan kantor untuk mempertahankan riwayat.';
+        }
+        if ($record instanceof Branch && KioskDeviceEvent::where('branch_id', $record->id)->exists()) {
+            return 'Kantor memiliki riwayat perangkat kiosk. Nonaktifkan kantor untuk mempertahankan riwayat.';
         }
         if ($record instanceof ServiceSetting && ($record->users()->exists()
             || $record->queues()->withoutGlobalScopes()->exists())) {

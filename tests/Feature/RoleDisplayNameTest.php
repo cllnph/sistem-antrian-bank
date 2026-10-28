@@ -4,11 +4,15 @@ namespace Tests\Feature;
 
 use App\Filament\Resources\RoleResource\Pages\ManageRoles;
 use App\Filament\Resources\UserResource\Pages\ManageUsers;
-use App\Filament\Widgets\ControlCenterStaffWidget;
-use App\Models\{Branch, Role, Queue, ServiceSetting, User};
+use App\Models\Branch;
+use App\Models\Queue;
+use App\Models\Role;
+use App\Models\ServiceSetting;
+use App\Models\User;
 use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
+use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
 class RoleDisplayNameTest extends TestCase
@@ -61,12 +65,11 @@ class RoleDisplayNameTest extends TestCase
         User::factory()->create()->assignRole('teller');
         Livewire::test(ManageRoles::class)->assertSee('Petugas Kas');
         Livewire::test(ManageUsers::class)->assertSee('Petugas Kas');
-        Livewire::test(ControlCenterStaffWidget::class)->assertSee('Petugas Kas');
     }
 
     public function test_new_role_gets_a_code_and_keeps_it_after_label_edit(): void
     {
-        $permission = \Spatie\Permission\Models\Permission::findByName('view_any_queue');
+        $permission = Permission::findByName('view_any_queue');
         Livewire::test(ManageRoles::class)->callAction('create', data: [
             'display_name' => 'Pengawas Cabang', 'permissions' => [$permission->id],
         ])->assertHasNoActionErrors();

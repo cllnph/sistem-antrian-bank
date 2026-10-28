@@ -1,0 +1,16 @@
+{
+  "physical_print": "not sent: both local Sumatra executables are mocks",
+  "bogor": {
+    "number": "CS-012",
+    "status": "submitted",
+    "one_native_call": true
+  },
+  "depok": {
+    "number": "T-004",
+    "status": "submitted",
+    "one_native_call": true
+  },
+  "restart_after_start": "unknown, no native replay",
+  "native_timeout": "unknown, no automatic replay",
+  "agent_outage": "503, no ticket issued"
+}

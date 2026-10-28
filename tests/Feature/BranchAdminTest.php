@@ -54,8 +54,8 @@ class BranchAdminTest extends TestCase
         $this->assertFalse($admin->can('update', $foreign->serviceSetting));
         $this->assertSame(2, UserResource::getEloquentQuery()->count());
         Livewire::test(BranchOperations::class)->assertSuccessful()
-            ->assertSee('cs.bogor@banktaspen.co.id')->assertDontSee('cs.depok@banktaspen.co.id')
-            ->assertSee('Kelola Akun')->assertDontSee('Kelola Cabang');
+            ->assertSee('Kantor Cabang Bogor')->assertDontSee('Kantor Cabang Depok')
+            ->assertDontSee('Akun petugas');
         $this->get('/admin')->assertRedirect(BranchOperations::getUrl());
         $this->get('/admin/roles')->assertForbidden();
         $this->get('/admin/branches')->assertForbidden();

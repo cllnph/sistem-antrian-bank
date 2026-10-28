@@ -2,13 +2,17 @@
 
 namespace App\Jobs;
 
+use App\Models\Branch;
 use App\Models\PrintJob;
+use App\Models\Queue;
 use App\Services\Printing\PrinterGateway;
 use App\Services\Printing\PrintOutcomeUnknown;
 use App\Services\Printing\PrintStorage;
 use App\Services\Printing\ReceiptRenderer;
+use App\Services\QueuePeriods;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\DB;
 
 class SubmitTicketPrint implements ShouldQueue
 {
@@ -25,7 +29,7 @@ class SubmitTicketPrint implements ShouldQueue
     public function handle(ReceiptRenderer $renderer, PrinterGateway $gateway): void
     {
         $job = PrintJob::find($this->printJobId);
-        if (! $job || $job->status !== 'queued') {
+        if (! $job || $job->transport !== 'server' || $job->print_agent_id || $job->status !== 'queued') {
             return;
         }
         if ($job->created_at->lte(now()->subSeconds(config('printing.job_ttl')))) {
@@ -33,8 +37,9 @@ class SubmitTicketPrint implements ShouldQueue
 
             return;
         }
+        app(QueuePeriods::class)->ensure(Branch::findOrFail($job->snapshot['branch_id']));
         // At most one automatic native submission, including queue redelivery after a crash.
-        if (! PrintJob::whereKey($job->id)->where('status', 'queued')->update(['status' => 'processing', 'started_at' => now()])) {
+        if (! $this->transition($job, 'queued', ['status' => 'processing', 'started_at' => now()])) {
             return;
         }
         $path = PrintStorage::directory().'/'.$job->id.'.pdf';
@@ -48,7 +53,7 @@ class SubmitTicketPrint implements ShouldQueue
             if (file_put_contents($path, $pdf, LOCK_EX) === false) {
                 throw new \RuntimeException('PDF tidak dapat disimpan.');
             }
-            if (! PrintJob::whereKey($job->id)->where('status', 'processing')->update(['submission_started_at' => now()])) {
+            if (! $this->transition($job, 'processing', ['submission_started_at' => now()])) {
                 return;
             }
             $sending = true;
@@ -62,6 +67,19 @@ class SubmitTicketPrint implements ShouldQueue
                 @unlink($path);
             }
         }
+    }
+
+    private function transition(PrintJob $job, string $from, array $values): bool
+    {
+        return DB::transaction(function () use ($job, $from, $values) {
+            $branch = Branch::whereKey($job->snapshot['branch_id'])->lockForUpdate()->firstOrFail();
+            $state = app(QueuePeriods::class)->lockedState($branch);
+            if (! $state->next_reset_at->isFuture() || ! Queue::withoutGlobalScopes()->currentPeriod()->whereKey($job->queue_id)->exists()) {
+                return false;
+            }
+
+            return (bool) PrintJob::whereKey($job->id)->where('status', $from)->update($values);
+        });
     }
 
     public function failed(?\Throwable $exception): void

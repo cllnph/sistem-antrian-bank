@@ -2,6 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\Branch;
+use App\Models\Queue;
+use App\Models\ServiceSetting;
 use App\Models\User;
 use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -61,12 +64,12 @@ class AdminPanelTest extends TestCase
     #[Test]
     public function test_staff_sees_only_single_next_waiting_queue_ticket(): void
     {
-        $tellerService = \App\Models\ServiceSetting::create(['label' => 'Teller', 'service' => 'teller', 'counter_name' => 'Loket Teller', 'is_active' => true]);
-        $teller = User::factory()->create(['service_setting_id' => $tellerService->id]);
+        $tellerService = ServiceSetting::create(['branch_id' => Branch::firstOrCreate(['code' => '001'], ['slug' => 'test', 'name' => 'Test', 'type' => 'Kantor Cabang', 'is_active' => true])->id, 'label' => 'Teller', 'service' => 'teller', 'counter_name' => 'Loket Teller', 'is_active' => true]);
+        $teller = User::factory()->create(['branch_id' => Branch::where('code', '001')->value('id'), 'service_setting_id' => $tellerService->id]);
         $teller->assignRole('teller');
 
-        \App\Models\Queue::create(['number' => 'T-001', 'service_setting_id' => $tellerService->id, 'status' => 'waiting']);
-        \App\Models\Queue::create(['number' => 'T-002', 'service_setting_id' => $tellerService->id, 'status' => 'waiting']);
+        Queue::create(['branch_id' => Branch::where('code', '001')->value('id'), 'number' => 'T-001', 'service_setting_id' => $tellerService->id, 'status' => 'waiting']);
+        Queue::create(['branch_id' => Branch::where('code', '001')->value('id'), 'number' => 'T-002', 'service_setting_id' => $tellerService->id, 'status' => 'waiting']);
 
         $response = $this->actingAs($teller)->get('/admin/queues');
         $response->assertOk()
@@ -108,7 +111,7 @@ class AdminPanelTest extends TestCase
         $admin = User::factory()->create();
         $admin->assignRole('admin');
 
-        $this->actingAs($admin)->get('/admin/admin-control-center')
+        $this->actingAs($admin)->get('/admin/operasional-cabang')
             ->assertOk();
     }
 

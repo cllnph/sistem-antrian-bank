@@ -6,6 +6,7 @@ use App\Models\Branch;
 use App\Models\Queue;
 use App\Models\ServiceSetting;
 use App\Models\User;
+use Carbon\Carbon;
 use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
@@ -21,7 +22,7 @@ class QueueDashboardTest extends TestCase
     {
         parent::setUp();
         $this->seed(RoleAndPermissionSeeder::class);
-        $this->travelTo(\Carbon\Carbon::parse('2026-10-14 09:00:00', 'Asia/Jakarta'));
+        $this->travelTo(Carbon::parse('2026-10-14 09:00:00', 'Asia/Jakarta'));
         $this->branch = Branch::create([
             'code' => '001', 'slug' => 'pusat', 'name' => 'Kantor Pusat',
             'type' => 'Kantor Pusat', 'is_active' => true,
@@ -60,8 +61,8 @@ class QueueDashboardTest extends TestCase
     {
         $tellerSetting = ServiceSetting::create(['branch_id' => $this->branch->id, 'label' => 'Loket Teller', 'counter_name' => 'Loket Teller', 'service' => 'teller', 'is_active' => true]);
 
-        $this->post(route('queue.store-number'), ['service' => 'teller'])
-            ->assertSessionHas('ticket', 'T-001');
+        $this->issueTicket(route('queue.store-number'), ['service' => 'teller'])
+            ->assertJsonPath('ticket', 'T-001');
 
         $this->assertDatabaseHas('queues', [
             'number' => 'T-001',
@@ -76,8 +77,8 @@ class QueueDashboardTest extends TestCase
         $tellerSetting = ServiceSetting::create(['branch_id' => $this->branch->id, 'label' => 'Loket Teller', 'counter_name' => 'Loket Teller', 'service' => 'teller', 'is_active' => true]);
         Queue::create(['branch_id' => $this->branch->id, 'number' => 'T-999', 'service_setting_id' => $tellerSetting->id, 'status' => 'waiting']);
 
-        $this->post(route('queue.store-number'), ['service' => 'teller'])
-            ->assertSessionHas('ticket', 'T-1000');
+        $this->issueTicket(route('queue.store-number'), ['service' => 'teller'])
+            ->assertJsonPath('ticket', 'T-1000');
 
         $this->assertDatabaseHas('queues', [
             'number' => 'T-1000',

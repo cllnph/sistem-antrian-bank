@@ -1,0 +1,9 @@
+{
+  "installer_version": "1.0.2",
+  "full_installation": "passed",
+  "heartbeat": "passed",
+  "native_admin_connection_status": "Siap",
+  "branch_routing_enabled": false,
+  "physical_print": "not requested",
+  "production_database": "untouched"
+}

@@ -4,18 +4,26 @@ namespace App\Http\Controllers;
 
 use App\Enums\QueueStatus;
 use App\Models\Branch;
+use App\Models\PrintJob;
 use App\Models\Queue;
 use App\Models\QueueLog;
 use App\Models\Scopes\ServiceSettingScope;
 use App\Models\ServiceSetting;
-use App\Services\NotificationService;
+use App\Services\BranchSchedule;
+use App\Services\KioskDeviceHistory;
 use App\Services\KioskHours;
+use App\Services\NotificationService;
+use App\Services\OperationStatus;
+use App\Services\Printing\KioskPrintRouting;
+use App\Services\Printing\TicketPrinting;
+use App\Services\QueuePeriods;
+use App\Services\QueueResetService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class QueueController extends Controller
@@ -77,13 +85,12 @@ class QueueController extends Controller
 
         $currentBranch = $this->resolveBranch($request, $branch);
         $branchId = $currentBranch->id;
+        app(QueuePeriods::class)->ensure($currentBranch);
 
         $settings = ServiceSetting::query()
             ->where('branch_id', $branchId)
             ->get()
             ->keyBy('service');
-
-        $today = now()->toDateString();
 
         $tellerSettingIds = ServiceSetting::query()
             ->where('branch_id', $branchId)
@@ -95,50 +102,24 @@ class QueueController extends Controller
             ->where('service', 'cs')
             ->pluck('id');
 
-        // Teller Next Number & Wait Info
-        $maxTellerSeq = empty($tellerSettingIds) ? 0 : (Queue::withoutGlobalScope(ServiceSettingScope::class)
-            ->where('branch_id', $branchId)
-            ->whereIn('service_setting_id', $tellerSettingIds)
-            ->whereDate('created_at', $today)
-            ->where('number', 'like', 'T-%')
-            ->get()
-            ->map(function ($q) {
-                $parts = explode('-', $q->number);
-
-                return (int) end($parts);
-            })
-            ->max() ?? 0);
-        $nextTellerNumber = sprintf('T-%03d', $maxTellerSeq + 1);
+        $nextTellerNumber = app(QueuePeriods::class)->nextNumber($currentBranch, 'teller');
 
         $tellerWaiting = empty($tellerSettingIds) ? 0 : Queue::withoutGlobalScope(ServiceSettingScope::class)
             ->where('branch_id', $branchId)
             ->whereIn('service_setting_id', $tellerSettingIds)
-            ->whereDate('created_at', $today)
+            ->currentPeriod()
             ->where('status', QueueStatus::WAITING)
             ->count();
         $tellerEstWait = $tellerWaiting > 0
             ? '~'.($tellerWaiting * 3).'–'.($tellerWaiting * 4)." Menit ({$tellerWaiting} Menunggu)"
             : '~1–3 Menit (Langsung)';
 
-        // CS Next Number & Wait Info
-        $maxCsSeq = empty($csSettingIds) ? 0 : (Queue::withoutGlobalScope(ServiceSettingScope::class)
-            ->where('branch_id', $branchId)
-            ->whereIn('service_setting_id', $csSettingIds)
-            ->whereDate('created_at', $today)
-            ->where('number', 'like', 'CS-%')
-            ->get()
-            ->map(function ($q) {
-                $parts = explode('-', $q->number);
-
-                return (int) end($parts);
-            })
-            ->max() ?? 0);
-        $nextCsNumber = sprintf('CS-%03d', $maxCsSeq + 1);
+        $nextCsNumber = app(QueuePeriods::class)->nextNumber($currentBranch, 'cs');
 
         $csWaiting = empty($csSettingIds) ? 0 : Queue::withoutGlobalScope(ServiceSettingScope::class)
             ->where('branch_id', $branchId)
             ->whereIn('service_setting_id', $csSettingIds)
-            ->whereDate('created_at', $today)
+            ->currentPeriod()
             ->where('status', QueueStatus::WAITING)
             ->count();
         $csEstWait = $csWaiting > 0
@@ -155,7 +136,7 @@ class QueueController extends Controller
         $currentServingTeller = empty($tellerSettingIds) ? null : Queue::withoutGlobalScope(ServiceSettingScope::class)
             ->where('branch_id', $branchId)
             ->whereIn('service_setting_id', $tellerSettingIds)
-            ->whereDate('created_at', $today)
+            ->currentPeriod()
             ->whereIn('status', [QueueStatus::CALLED, QueueStatus::SERVING])
             ->latest('called_at')
             ->value('number');
@@ -163,16 +144,21 @@ class QueueController extends Controller
         $currentServingCs = empty($csSettingIds) ? null : Queue::withoutGlobalScope(ServiceSettingScope::class)
             ->where('branch_id', $branchId)
             ->whereIn('service_setting_id', $csSettingIds)
-            ->whereDate('created_at', $today)
+            ->currentPeriod()
             ->whereIn('status', [QueueStatus::CALLED, QueueStatus::SERVING])
             ->latest('called_at')
             ->value('number');
 
         $allBranches = Branch::where('is_active', true)->orderBy('code')->get();
 
+        app(KioskDeviceHistory::class)->opened($request, $currentBranch);
+
         return view('queue.take-number', [
             'branch' => $currentBranch,
+            'operations' => app(OperationStatus::class)->forBranch($currentBranch),
+            'issuanceContext' => app(QueuePeriods::class)->context($request, $currentBranch),
             'allBranches' => $allBranches,
+            'printSelection' => app(KioskPrintRouting::class)->selection($currentBranch, $request),
             'settings' => $settings,
             'nextTellerNumber' => $nextTellerNumber,
             'tellerWaiting' => $tellerWaiting,
@@ -192,9 +178,10 @@ class QueueController extends Controller
     public function storeNumber(Request $request, ?string $branch = null): RedirectResponse|JsonResponse
     {
         $data = $request->validate([
-            'service' => ['required', 'string'],
+            'service' => ['required', 'string', 'in:cs,teller,umum'],
             'branch_id' => ['nullable', 'integer', 'exists:branches,id'],
-            'request_id' => ['nullable', 'uuid'],
+            'request_id' => ['required', 'uuid'],
+            'issuance_context' => ['nullable', 'string', 'max:4096'],
         ]);
 
         $serviceKey = $data['service'];
@@ -202,20 +189,25 @@ class QueueController extends Controller
             ? Branch::where('is_active', true)->findOrFail($data['branch_id'])
             : $this->resolveBranch($request, $branch));
         if (isset($data['branch_id']) && (int) $data['branch_id'] !== (int) $currentBranch->id) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
+            throw ValidationException::withMessages([
                 'branch_id' => 'Kantor tiket harus sesuai dengan kantor pada halaman kiosk.',
             ]);
         }
         $branchId = $currentBranch->id;
+        app(QueuePeriods::class)->ensure($currentBranch);
 
-        $printing = app(\App\Services\Printing\TicketPrinting::class);
-        $requestId = $data['request_id'] ?? (string) \Illuminate\Support\Str::uuid();
-        if ($existing = \App\Models\PrintJob::find($requestId)) {
+        $printing = app(TicketPrinting::class);
+        $requestId = $data['request_id'];
+        if ($existing = PrintJob::find($requestId)) {
             $printing->assertReplay($existing, $request, $branchId, $serviceKey);
+
             return response()->json($printing->response($existing));
         }
-        if (! KioskHours::isOpen()) {
-            $message = 'Pengambilan tiket dibuka Senin - Jumat pukul 04.00 - 18.00 WIB.';
+        app(QueuePeriods::class)->expiredRequest($requestId, $request, $branchId, $serviceKey);
+        abort_unless(! empty($data['issuance_context']), 409, 'Muat ulang halaman kiosk sebelum mengambil nomor baru.');
+        if (! KioskHours::isOpen($currentBranch)) {
+            $message = 'Pengambilan tiket sedang ditutup. Jadwal: '.app(BranchSchedule::class)->label($currentBranch).'.';
+
             return $request->expectsJson() || $request->ajax()
                 ? response()->json(['success' => false, 'message' => $message], 422)
                 : back()->with('error', $message);
@@ -256,18 +248,12 @@ class QueueController extends Controller
         }
 
         try {
-            $printConfiguration = $printing->ready($currentBranch);
+            $printConfiguration = $printing->ready($currentBranch, $request);
         } catch (\RuntimeException $e) {
             return $request->expectsJson() || $request->ajax()
                 ? response()->json(['success' => false, 'message' => $e->getMessage()], 503)
                 : back()->with('error', $e->getMessage());
         }
-
-        $prefix = match ($serviceKey) {
-            'cs' => 'CS',
-            'teller' => 'T',
-            default => 'U',
-        };
 
         $attempts = 0;
         $maxAttempts = 5;
@@ -276,39 +262,26 @@ class QueueController extends Controller
 
         while ($attempts < $maxAttempts) {
             try {
-                $queue = DB::transaction(function () use ($setting, $serviceSettingIds, $prefix, $branchId, $request, $printing, $requestId, $serviceKey, $printConfiguration, &$printJob) {
+                $queue = DB::transaction(function () use ($setting, $branchId, $request, $printing, $requestId, $serviceKey, $printConfiguration, $data, &$printJob) {
                     // Lock a stable row even when today's queue is empty. All kiosks
                     // in this branch must finish allocating a number before the next.
-                    Branch::whereKey($branchId)->lockForUpdate()->firstOrFail();
-                    if ($existing = \App\Models\PrintJob::find($requestId)) {
+                    $lockedBranch = Branch::whereKey($branchId)->lockForUpdate()->firstOrFail();
+                    if ($existing = PrintJob::find($requestId)) {
                         $printing->assertReplay($existing, $request, $branchId, $serviceKey);
                         $printJob = $existing;
+
                         return $existing->ticket;
                     }
                     abort_unless(Branch::whereKey($branchId)->where('is_active', true)->exists()
                         && ServiceSetting::whereKey($setting->id)->where('is_active', true)->exists(), 422, 'Kantor atau loket sedang tidak aktif.');
 
-                    $todayDate = now()->toDateString();
-                    $maxSeq = Queue::query()
-                        ->withoutGlobalScope(ServiceSettingScope::class)
-                        ->where('branch_id', $branchId)
-                        ->whereIn('service_setting_id', $serviceSettingIds)
-                        ->whereDate('created_at', $todayDate)
-                        ->where('number', 'like', "{$prefix}-%")
-                        ->lockForUpdate()
-                        ->get()
-                        ->map(function ($q) {
-                            $parts = explode('-', $q->number);
-
-                            return (int) end($parts);
-                        })
-                        ->max() ?? 0;
-
-                    $sequence = $maxSeq + 1;
+                    app(QueuePeriods::class)->expiredRequest($requestId, $request, $branchId, $serviceKey);
+                    app(QueuePeriods::class)->assertContext($request, $lockedBranch, $data['issuance_context']);
+                    abort_unless(KioskHours::isOpen($lockedBranch), 422, 'Jam pengambilan tiket sudah ditutup.');
 
                     $newQueue = Queue::create([
                         'branch_id' => $branchId,
-                        'number' => sprintf('%s-%03d', $prefix, $sequence),
+                        // The observer allocates from the locked branch/service counter.
                         'service_setting_id' => $setting->id,
                         'status' => QueueStatus::WAITING,
                     ]);
@@ -324,12 +297,14 @@ class QueueController extends Controller
                     ]);
 
                     $printJob = $printing->enqueue($newQueue, $requestId, $printing->owner($request), $printConfiguration);
+
                     return $newQueue;
                 });
                 break;
             } catch (QueryException $e) {
-                if ($existing = \App\Models\PrintJob::find($requestId)) {
+                if ($existing = PrintJob::find($requestId)) {
                     $printing->assertReplay($existing, $request, $branchId, $serviceKey);
+
                     return response()->json($printing->response($existing));
                 }
                 $attempts++;
@@ -341,10 +316,13 @@ class QueueController extends Controller
         }
 
         if ($queue) {
+            if ($queue->wasRecentlyCreated && $printJob) {
+                app(KioskDeviceHistory::class)->issued($request, $printJob);
+            }
             $waitingCount = Queue::withoutGlobalScopes()
                 ->where('branch_id', $branchId)
                 ->whereIn('service_setting_id', $serviceSettingIds)
-                ->whereDate('created_at', now()->toDateString())
+                ->currentPeriod()
                 ->where('status', QueueStatus::WAITING)
                 ->count();
 
@@ -407,13 +385,11 @@ class QueueController extends Controller
 
     public function resetQueues(): RedirectResponse
     {
-        $data = request()->validate(['branch_id' => ['nullable', 'integer', 'exists:branches,id']]);
-        $user = auth()->user();
-        $branchId = isset($data['branch_id']) ? (int) $data['branch_id'] : ($user->branch_id ? (int) $user->branch_id : null);
-        $count = \App\Services\QueueResetService::reset($user, $branchId);
-        Log::warning("User #{$user->id} closed {$count} queues; history retained.");
+        $data = request()->validate(['branch_id' => ['required', 'integer', 'exists:branches,id'],
+            'period_id' => ['required', 'uuid'], 'request_id' => ['required', 'uuid']]);
+        $count = QueueResetService::reset(auth()->user(), (int) $data['branch_id'], null, $data['period_id'], $data['request_id']);
 
-        return back()->with('status', "{$count} antrean aktif ditandai dilewati. Riwayat tetap tersimpan.");
+        return back()->with('status', $count.' antrean periode lama ditutup dan dibersihkan.');
     }
 
     private function resolveServiceSetting(string $serviceKey): ?ServiceSetting
@@ -425,6 +401,8 @@ class QueueController extends Controller
             || (int) $setting->branch_id !== (int) $user->branch_id || $setting->service !== $serviceKey) {
             return null;
         }
+
+        app(QueuePeriods::class)->ensure($user->branch);
 
         return $setting->is_active ? $setting : null;
     }
@@ -445,12 +423,13 @@ class QueueController extends Controller
             ->toArray();
 
         $queue = DB::transaction(function () use ($setting, $allServiceSettingIds, $branchId) {
+            Branch::whereKey($branchId)->lockForUpdate()->firstOrFail();
             ServiceSetting::whereKey($setting->id)->lockForUpdate()->firstOrFail();
             $hasActive = Queue::withoutGlobalScopes()->where('service_setting_id', $setting->id)
-                ->whereDate('created_at', now()->toDateString())
+                ->currentPeriod()
                 ->whereIn('status', [QueueStatus::CALLED, QueueStatus::SERVING])->exists();
             if ($hasActive) {
-                throw \Illuminate\Validation\ValidationException::withMessages([
+                throw ValidationException::withMessages([
                     'queue' => 'Selesaikan pelayanan aktif di loket sebelum memanggil nomor berikutnya.',
                 ]);
             }
@@ -459,7 +438,7 @@ class QueueController extends Controller
                 ->withoutGlobalScope(ServiceSettingScope::class)
                 ->when($branchId, fn ($q) => $q->where('branch_id', $branchId))
                 ->whereIn('service_setting_id', $allServiceSettingIds)
-                ->whereDate('created_at', now()->toDateString())
+                ->currentPeriod()
                 ->where('status', QueueStatus::WAITING)
                 ->orderBy('id')
                 ->lockForUpdate()
@@ -491,67 +470,48 @@ class QueueController extends Controller
         return back()->with('status', "Antrean {$queue->number} dipanggil ke {$setting->counter_name}.");
     }
 
-    private function complete(string $serviceKey): RedirectResponse
+    private function mutateActive(string $serviceKey, string $action): ?Queue
     {
         $setting = $this->resolveServiceSetting($serviceKey);
-        $queue = $setting ? $this->activeQueue($setting->id) : null;
-        if (! $queue) {
-            return back()->with('status', 'Belum ada antrean aktif.');
+        if (! $setting) {
+            return null;
         }
 
-        $queue->update(['status' => QueueStatus::COMPLETED]);
+        return DB::transaction(function () use ($setting, $action) {
+            Branch::whereKey($setting->branch_id)->lockForUpdate()->firstOrFail();
+            $queue = $this->activeQueue($setting->id);
+            if (! $queue) {
+                return null;
+            }
+            $queue->update(match ($action) {
+                'completed' => ['status' => QueueStatus::COMPLETED],
+                'skipped' => ['status' => QueueStatus::SKIPPED],
+                default => ['called_at' => now(), 'service_setting_id' => $setting->id],
+            });
+            QueueLog::create(['queue_id' => $queue->id, 'branch_id' => $queue->branch_id, 'actor_id' => auth()->id(), 'action' => $action]);
 
-        QueueLog::create([
-            'queue_id' => $queue->id,
-            'branch_id' => $queue->branch_id,
-            'actor_id' => auth()->id(),
-            'action' => 'completed',
-        ]);
+            return $queue;
+        });
+    }
 
-        return back()->with('status', "Antrean {$queue->number} selesai dilayani.");
+    private function complete(string $serviceKey): RedirectResponse
+    {
+        $queue = $this->mutateActive($serviceKey, 'completed');
+
+        return back()->with('status', $queue ? 'Antrean '.$queue->number.' selesai dilayani.' : 'Belum ada antrean aktif.');
     }
 
     private function skip(string $serviceKey): RedirectResponse
     {
-        $setting = $this->resolveServiceSetting($serviceKey);
-        $queue = $setting ? $this->activeQueue($setting->id) : null;
-        if (! $queue) {
-            return back()->with('status', 'Belum ada antrean aktif.');
-        }
-
-        $queue->update(['status' => QueueStatus::SKIPPED]);
-
-        QueueLog::create([
-            'queue_id' => $queue->id,
-            'branch_id' => $queue->branch_id,
-            'actor_id' => auth()->id(),
-            'action' => 'skipped',
-        ]);
-
-        return $this->callNext($serviceKey);
+        return $this->mutateActive($serviceKey, 'skipped')
+            ? $this->callNext($serviceKey) : back()->with('status', 'Belum ada antrean aktif.');
     }
 
     private function recall(string $serviceKey): RedirectResponse
     {
-        $setting = $this->resolveServiceSetting($serviceKey);
-        $queue = $setting ? $this->activeQueue($setting->id) : null;
-        if (! $queue) {
-            return back()->with('status', 'Belum ada antrean aktif.');
-        }
+        $queue = $this->mutateActive($serviceKey, 'recalled');
 
-        $queue->update([
-            'called_at' => now(),
-            'service_setting_id' => $setting->id,
-        ]);
-
-        QueueLog::create([
-            'queue_id' => $queue->id,
-            'branch_id' => $queue->branch_id,
-            'actor_id' => auth()->id(),
-            'action' => 'recalled',
-        ]);
-
-        return back()->with('status', "Antrean {$queue->number} dipanggil ulang ke {$setting->counter_name}.");
+        return back()->with('status', $queue ? 'Antrean '.$queue->number.' dipanggil ulang.' : 'Belum ada antrean aktif.');
     }
 
     private function activeQueue(?int $settingId): ?Queue
@@ -567,16 +527,16 @@ class QueueController extends Controller
             ->when($user?->branch_id, fn ($q) => $q->where('branch_id', $user->branch_id))
             ->where('service_setting_id', $settingId)
             ->where('served_by', auth()->id())
-            ->whereDate('created_at', now()->toDateString())
+            ->currentPeriod()
             ->whereIn('status', [QueueStatus::CALLED, QueueStatus::SERVING])
-            ->latest('called_at')
+            ->latest('called_at')->lockForUpdate()
             ->first();
     }
 
     public function verifyTicket(int $queueId): View
     {
         $queue = Queue::withoutGlobalScope(ServiceSettingScope::class)
-            ->with(['serviceSetting', 'servedBy.serviceSetting', 'branch'])
+            ->currentPeriod()->with(['serviceSetting', 'servedBy.serviceSetting', 'branch'])
             ->find($queueId);
         $number = $queue?->number ?? (string) $queueId;
 
@@ -585,7 +545,7 @@ class QueueController extends Controller
             $waitingBefore = Queue::withoutGlobalScopes()
                 ->where('branch_id', $queue->branch_id)
                 ->whereHas('serviceSetting', fn ($settings) => $settings->where('service', $queue->serviceSetting->service))
-                ->whereDate('created_at', $queue->created_at->toDateString())
+                ->currentPeriod()
                 ->where('status', QueueStatus::WAITING)
                 ->where('id', '<', $queue->id)
                 ->count();

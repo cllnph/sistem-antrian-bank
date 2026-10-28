@@ -1,0 +1,11 @@
+{
+  "identity": "same IP/UA: separate browsers; same browser retained after session reset",
+  "native_navigation": "passed",
+  "rename": "passed",
+  "device_history_filter": "passed",
+  "devices": 3,
+  "events": 4,
+  "automatic_print_agent_enrollments": 0,
+  "physical_print": "not sent",
+  "javascript_errors": []
+}

@@ -54,6 +54,7 @@ class KioskTestModeTest extends TestCase
                 'label' => $service, 'counter_name' => $service, 'is_active' => true,
             ]);
         }
+
         return $branch;
     }
 
@@ -79,9 +80,9 @@ class KioskTestModeTest extends TestCase
         $this->withSession(['_token' => 'kiosk-test-token']);
         try {
             $this->get('/ambil-nomor/101')->assertOk()->assertSee('Ambil Tiket')
-                ->assertDontSee('Layanan Tutup')->assertDontSee('Pengambilan tiket dibuka Senin - Jumat');
+                ->assertDontSee('>Layanan Tutup</span>', false)->assertDontSee('Pengambilan tiket dibuka Senin - Jumat');
             foreach (['cs' => 'CS-001', 'teller' => 'T-001'] as $service => $number) {
-                $this->postJson('/ambil-nomor/101', ['branch_id' => $branch->id, 'service' => $service, '_token' => 'kiosk-test-token'])
+                $this->issueTicket('/ambil-nomor/101', ['branch_id' => $branch->id, 'service' => $service, '_token' => 'kiosk-test-token'])
                     ->assertOk()->assertJsonPath('ticket', $number);
                 $this->assertDatabaseHas('queues', ['number' => $number, 'branch_id' => $branch->id, 'status' => 'waiting']);
             }
@@ -98,7 +99,7 @@ class KioskTestModeTest extends TestCase
         $this->travelTo(Carbon::parse('2026-10-14 23:28', 'Asia/Jakarta'));
         $this->get('/ambil-nomor/101')->assertOk()->assertSee('Layanan Tutup');
         foreach (['cs', 'teller'] as $service) {
-            $this->postJson('/ambil-nomor/101', ['service' => $service])->assertUnprocessable();
+            $this->issueTicket('/ambil-nomor/101', ['service' => $service])->assertUnprocessable();
         }
         $this->assertDatabaseCount('queues', 0);
     }
@@ -110,8 +111,8 @@ class KioskTestModeTest extends TestCase
         config(['kiosk.test_mode_enabled' => true]);
         $this->travelTo(Carbon::parse('2026-10-14 23:28', 'Asia/Jakarta'));
         $this->get('/ambil-nomor/101')->assertOk()->assertSee('Layanan Customer Service sedang tidak aktif saat ini.');
-        $this->postJson('/ambil-nomor/101', ['service' => 'cs'])->assertUnprocessable();
-        $this->postJson('/ambil-nomor/101', ['service' => 'teller'])->assertOk();
+        $this->issueTicket('/ambil-nomor/101', ['service' => 'cs'])->assertUnprocessable();
+        $this->issueTicket('/ambil-nomor/101', ['service' => 'teller'])->assertOk();
         $this->assertDatabaseCount('queues', 1);
     }
 
@@ -122,7 +123,7 @@ class KioskTestModeTest extends TestCase
         $this->travelTo(Carbon::parse('2026-10-14 23:28', 'Asia/Jakarta'));
         $this->get('/ambil-nomor/101')->assertNotFound();
         foreach (['cs', 'teller'] as $service) {
-            $this->postJson('/ambil-nomor/101', ['service' => $service])->assertNotFound();
+            $this->issueTicket('/ambil-nomor/101', ['service' => $service])->assertNotFound();
         }
         $this->assertDatabaseCount('queues', 0);
     }
@@ -139,7 +140,7 @@ class KioskTestModeTest extends TestCase
                 $this->travelTo(Carbon::parse($date, 'Asia/Jakarta'));
                 $this->get('/ambil-nomor/101')->assertOk()->assertSee('Layanan Tutup');
                 foreach (['cs', 'teller'] as $service) {
-                    $this->postJson('/ambil-nomor/101', ['service' => $service, '_token' => 'kiosk-test-token'])
+                    $this->issueTicket('/ambil-nomor/101', ['service' => $service, '_token' => 'kiosk-test-token'])
                         ->assertUnprocessable()->assertJsonPath('success', false);
                 }
             }

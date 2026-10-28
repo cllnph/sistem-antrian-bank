@@ -1,0 +1,11 @@
+{
+  "reassign_existing_l3250_to_occupied_head_office": "passed",
+  "create_multiple_printers_with_optional_printer_name": "passed",
+  "native_detail_and_delete": "passed",
+  "versioned_download_with_bundled_print_engine": "passed",
+  "local_dialog_and_reopen_same_ticket": "passed",
+  "two_unpaired_browsers_and_private_receipt": "passed",
+  "native_pair_and_return_to_local": "passed",
+  "javascript_errors": [],
+  "physical_print": "not sent; browser print calls intercepted"
+}

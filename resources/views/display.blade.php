@@ -877,16 +877,12 @@
         let audioEnabled = true;
         let lastCalledTimes = {
             @foreach(($initialData['counters'] ?? []) as $c)
-                @if(!empty($c['called_at']))
-                    {{ $c['id'] }}: @json($c['called_at']),
-                @endif
+                {{ $c['id'] }}: @json($c['called_at'] ?? null),
             @endforeach
         };
         let lastCalledNumbers = {
             @foreach(($initialData['counters'] ?? []) as $c)
-                @if(!empty($c['current_number']))
-                    {{ $c['id'] }}: @json($c['current_number']),
-                @endif
+                {{ $c['id'] }}: @json($c['current_number'] ?? null),
             @endforeach
         };
         let isInitialLoad = true;
@@ -897,13 +893,34 @@
         let isAudioPlaying = false;
         let activeUtterance = null;
         let audioWatchdogTimer = null;
+        let announcementVoice = null;
 
+        function selectAnnouncementVoice() {
+            if (!('speechSynthesis' in window)) return;
+
+            const indonesianVoices = window.speechSynthesis.getVoices()
+                .filter(voice => /^(id|in)([-_]|$)/i.test(voice.lang));
+
+            // Utamakan suara perempuan Indonesia, bukan suara bawaan perangkat.
+            announcementVoice = indonesianVoices.find(voice =>
+                /gadis|damayanti|\bfemale\b|\bwanita\b|\bperempuan\b/i.test(voice.name)
+            ) || indonesianVoices.find(voice => /google/i.test(voice.name))
+                || indonesianVoices.find(voice => !/\b(ardi|andika|male|laki-laki)\b/i.test(voice.name))
+                || null;
+        }
+
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.addEventListener('voiceschanged', selectAnnouncementVoice);
+            selectAnnouncementVoice();
+        }
+
+        let displayOffset = Date.parse(@json($initialData['operations']['server_time'])) - Date.now();
         function updateClock() {
-            const now = new Date();
-            const hours = String(now.getHours()).padStart(2, '0');
-            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const now = new Date(Date.now() + displayOffset);
+            const hours = new Intl.DateTimeFormat('en-GB', {timeZone:'Asia/Jakarta',hour:'2-digit',hour12:false}).format(now);
+            const minutes = new Intl.DateTimeFormat('en-GB', {timeZone:'Asia/Jakarta',minute:'2-digit'}).format(now).padStart(2,'0');
             document.getElementById('clockTime').textContent = `${hours}.${minutes} WIB`;
-            document.getElementById('clockDate').textContent = now.toLocaleDateString('id-ID', {
+            document.getElementById('clockDate').textContent = now.toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta',
                 weekday: 'long',
                 day: 'numeric',
                 month: 'long',
@@ -1057,6 +1074,8 @@
 
                     const utterance = new SpeechSynthesisUtterance(speechText);
                     utterance.lang = 'id-ID';
+                    selectAnnouncementVoice();
+                    if (announcementVoice) utterance.voice = announcementVoice;
                     utterance.rate = 0.88; // Tempo artikulasi jelas dan nyaman didengar
                     utterance.pitch = 1.0;
                     activeUtterance = utterance; // Referensi global pencegah GC browser bug
@@ -1102,6 +1121,7 @@
                 const response = await fetch("{{ url('/api/display/data/' . $branch->code) }}");
                 if (!response.ok) throw new Error("HTTP error " + response.status);
                 const data = await response.json();
+                if (data.operations) displayOffset = Date.parse(data.operations.server_time) - Date.now();
 
                 const grid = document.getElementById('displayGrid');
                 if (!grid) return;
@@ -1129,8 +1149,11 @@
                     const lastTime = lastCalledTimes[c.id];
                     const lastNum = lastCalledNumbers[c.id];
 
-                    // Panggilan baru terdeteksi jika waktu panggil berubah
-                    const isNewCall = !isInitialLoad && Boolean(c.called_at && lastTime !== undefined && lastTime !== c.called_at);
+                    // Bandingkan dengan data halaman agar panggilan pertama juga terdeteksi,
+                    // termasuk panggilan yang masuk sebelum polling pertama selesai.
+                    const isNewCall = Boolean(c.called_at && hasActiveNumber && (
+                        lastTime !== c.called_at || lastNum !== c.current_number
+                    ));
 
                     if (isNewCall && hasActiveNumber) {
                         const isRecall = Boolean(lastNum && lastNum === c.current_number);
@@ -1148,12 +1171,8 @@
                         }
                     }
 
-                    if (c.called_at) {
-                        lastCalledTimes[c.id] = c.called_at;
-                    }
-                    if (c.current_number) {
-                        lastCalledNumbers[c.id] = c.current_number;
-                    }
+                    lastCalledTimes[c.id] = c.called_at ?? null;
+                    lastCalledNumbers[c.id] = hasActiveNumber ? c.current_number : null;
                 });
 
                 grid.innerHTML = counters.map(c => {

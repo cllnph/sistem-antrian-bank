@@ -6,6 +6,7 @@ use App\Models\Branch;
 use App\Models\Queue;
 use App\Models\ServiceSetting;
 use App\Models\User;
+use Carbon\Carbon;
 use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
@@ -21,7 +22,7 @@ class ServiceSettingScopeTest extends TestCase
     {
         parent::setUp();
         $this->seed(RoleAndPermissionSeeder::class);
-        $this->travelTo(\Carbon\Carbon::parse('2026-10-14 09:00:00', 'Asia/Jakarta'));
+        $this->travelTo(Carbon::parse('2026-10-14 09:00:00', 'Asia/Jakarta'));
         $this->branch = Branch::create([
             'code' => '001', 'slug' => 'pusat', 'name' => 'Kantor Pusat',
             'type' => 'Kantor Pusat', 'is_active' => true,

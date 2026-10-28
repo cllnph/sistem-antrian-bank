@@ -6,7 +6,7 @@ use App\Models\Branch;
 
 class PrinterConfiguration
 {
-    public function forBranch(Branch $branch): array
+    public function forBranch(Branch $branch, bool $requirePrinter = true): array
     {
         try {
             $data = json_decode(file_get_contents(config('printing.config_path')), true, 512, JSON_THROW_ON_ERROR);
@@ -17,7 +17,7 @@ class PrinterConfiguration
         if (! $printer && app()->environment(['local', 'testing'])) {
             $printer = $data['printer_name'] ?? null;
         }
-        if (! is_string($printer) || trim($printer) === '' || preg_match('/[\x00-\x1f"\\\\]|PDF|XPS|OneNote|Fax/i', $printer)) {
+        if ($requirePrinter && (! is_string($printer) || trim($printer) === '' || preg_match('/[\x00-\x1f"\\\\]|PDF|XPS|OneNote|Fax/i', $printer))) {
             throw new \RuntimeException('Printer fisik untuk kantor ini belum dikonfigurasi. Hubungi petugas.');
         }
         $width = $data['paper']['width_mm'] ?? 80;

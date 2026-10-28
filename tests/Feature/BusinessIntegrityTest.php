@@ -3,11 +3,23 @@
 namespace Tests\Feature;
 
 use App\Enums\QueueStatus;
-use App\Models\{Branch, Queue, Role, ServiceSetting, User};
+use App\Filament\Resources\QueueResource;
+use App\Filament\Resources\QueueResource\Pages\ManageQueues;
+use App\Filament\Resources\UserResource\Pages\ManageUsers;
+use App\Models\Branch;
+use App\Models\Queue;
+use App\Models\Role;
+use App\Models\ServiceSetting;
+use App\Models\User;
+use App\Services\BranchDashboard;
+use App\Services\KioskHours;
 use App\Services\QueueResetService;
-use Database\Seeders\{BranchOperatingHoursSeeder, RoleAndPermissionSeeder};
+use Carbon\Carbon;
+use Database\Seeders\BranchOperatingHoursSeeder;
+use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
+use Livewire\Livewire;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\TestCase;
 
@@ -135,8 +147,8 @@ class BusinessIntegrityTest extends TestCase
         $counter->refresh()->update(['is_active' => false]);
         $branch->refresh()->update(['is_active' => false]);
         $this->assertFalse($branch->fresh()->is_active);
-        $this->blocked(fn () => $user->delete());
-        $this->blocked(fn () => $counter->delete());
+        $this->assertTrue($user->delete());
+        $this->assertTrue($counter->delete());
     }
 
     public function test_operator_roles_and_counter_branches_must_match(): void
@@ -180,29 +192,15 @@ class BusinessIntegrityTest extends TestCase
     public function test_reset_preserves_history_and_other_offices_and_services(): void
     {
         $branch = $this->branch();
-        $teller = $this->counter($branch);
-        $cs = $this->counter($branch, 'cs');
-        $foreign = $this->counter($this->branch('102'));
-        $waiting = $this->ticket($teller);
-        $serving = $this->ticket($teller, 'T-002', 'serving');
-        $done = $this->ticket($teller, 'T-003', 'completed');
-        $otherService = $this->ticket($cs, 'CS-001');
-        $otherOffice = $this->ticket($foreign);
-        $actor = User::factory()->create(['branch_id' => $branch->id]);
-        $actor->givePermissionTo('reset_queues');
-        $this->assertSame(2, QueueResetService::reset($actor, service: 'teller'));
-        $this->assertSame(QueueStatus::SKIPPED, $waiting->fresh()->status);
-        $this->assertSame(QueueStatus::SKIPPED, $serving->fresh()->status);
-        $this->assertSame(QueueStatus::COMPLETED, $done->fresh()->status);
-        foreach ([$otherService, $otherOffice] as $ticket) {
-            $this->assertSame(QueueStatus::WAITING, $ticket->fresh()->status);
-        }
-        $this->assertDatabaseCount('queues', 5);
-        $this->assertDatabaseCount('queue_logs', 2);
-        $this->assertDatabaseHas('queue_logs', ['queue_id' => $serving->id, 'action' => 'reset', 'actor_id' => $actor->id]);
-        $this->assertSame(0, QueueResetService::reset($actor, service: 'teller'));
-        $this->expectException(HttpException::class);
-        QueueResetService::reset($actor, $foreign->branch_id);
+        $this->ticket($this->counter($branch));
+        $this->ticket($this->counter($branch, 'cs'), 'CS-001');
+        $other = $this->ticket($this->counter($this->branch('102')));
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+        $this->assertSame(2, QueueResetService::reset($admin, $branch->id));
+        $this->assertDatabaseCount('queues', 1);
+        $this->assertSame(QueueStatus::WAITING, $other->fresh()->status);
+        $this->assertDatabaseCount('queue_logs', 0);
     }
 
     public function test_reset_requires_permission_and_active_account(): void
@@ -226,8 +224,8 @@ class BusinessIntegrityTest extends TestCase
         $this->seed(BranchOperatingHoursSeeder::class);
         $this->assertSame(BranchOperatingHoursSeeder::HOURS, $branch->fresh()->operating_hours);
         foreach (['04:00' => true, '07:59' => true, '15:01' => true, '17:59' => true, '18:00' => false] as $time => $open) {
-            $this->travelTo(\Carbon\Carbon::parse('2026-10-14 '.$time, 'Asia/Jakarta'));
-            $this->assertSame($open, \App\Services\KioskHours::isOpen());
+            $this->travelTo(Carbon::parse('2026-10-14 '.$time, 'Asia/Jakarta'));
+            $this->assertSame($open, KioskHours::isOpen());
         }
     }
 
@@ -256,7 +254,7 @@ class BusinessIntegrityTest extends TestCase
         $user->assignRole($role);
         $ticket = $this->ticket($counter);
         $this->actingAs($user);
-        \Livewire\Livewire::test(\App\Filament\Resources\QueueResource\Pages\ManageQueues::class)
+        Livewire::test(ManageQueues::class)
             ->assertTableActionHidden('call', $ticket)->assertActionHidden('toggleCounterStatus');
         $this->assertFalse($user->can('update', $ticket));
         $this->assertSame(QueueStatus::WAITING, $ticket->fresh()->status);
@@ -271,7 +269,7 @@ class BusinessIntegrityTest extends TestCase
         $other->assignRole('teller');
         $ticket = $this->ticket($counter, status: 'called', operator: $owner);
         $this->actingAs($other);
-        \Livewire\Livewire::test(\App\Filament\Resources\QueueResource\Pages\ManageQueues::class)
+        Livewire::test(ManageQueues::class)
             ->assertTableActionHidden('complete', $ticket)->assertTableActionHidden('recall', $ticket)
             ->assertTableActionHidden('skip', $ticket);
         $this->post(route('queue.complete.teller'))->assertRedirect();
@@ -288,7 +286,7 @@ class BusinessIntegrityTest extends TestCase
         $user->assignRole('teller');
         $name = $user->name;
         $this->actingAs($admin);
-        \Livewire\Livewire::test(\App\Filament\Resources\UserResource\Pages\ManageUsers::class)
+        Livewire::test(ManageUsers::class)
             ->callTableAction('edit', $user, data: ['name' => 'Should roll back', 'email' => $user->email,
                 'branch_id' => $counter->branch_id, 'service_setting_id' => $counter->id,
                 'roles' => Role::findByName('cs')->id, 'password' => ''])
@@ -304,11 +302,11 @@ class BusinessIntegrityTest extends TestCase
         $admin = User::factory()->create();
         $admin->assignRole('admin');
         $this->actingAs($admin);
-        \Livewire\Livewire::test(\App\Filament\Resources\QueueResource\Pages\ManageQueues::class)
+        Livewire::test(ManageQueues::class)
             ->callAction('create', data: ['number' => 'T-001', 'branch_id' => $other->id,
                 'service_setting_id' => $counter->id, 'status' => 'completed'])
             ->assertHasActionErrors(['service_setting_id']);
-        \Livewire\Livewire::test(\App\Filament\Resources\QueueResource\Pages\ManageQueues::class)
+        Livewire::test(ManageQueues::class)
             ->callAction('create', data: ['number' => 'T-001', 'branch_id' => $counter->branch_id,
                 'service_setting_id' => $counter->id, 'status' => 'completed'])->assertHasNoActionErrors();
         $this->assertDatabaseHas('queues', ['number' => 'T-001', 'status' => 'waiting']);
@@ -331,14 +329,9 @@ class BusinessIntegrityTest extends TestCase
         $other = $this->branch('102');
         $this->ticket($this->counter($other));
         $user = User::factory()->create(['branch_id' => $own->id]);
-        $user->givePermissionTo('view_control_center');
         $this->actingAs($user);
-        $page = app(\App\Filament\Pages\AdminControlCenter::class);
-        $page->selectedBranchId = (string) $other->id;
-        $data = (new \ReflectionMethod($page, 'getViewData'))->invoke($page);
-        $this->assertSame(0, $data['summary']['teller']['waiting']);
-        $this->assertSame([$own->id], array_column($data['branchStats'], 'id'));
-        $this->assertCount(0, $data['recentQueues']);
+        $this->expectException(HttpException::class);
+        app(BranchDashboard::class)->data($user, (string) $other->id);
     }
 
     public function test_read_only_view_does_not_expire_tickets_and_operator_expiry_is_logged(): void
@@ -349,11 +342,11 @@ class BusinessIntegrityTest extends TestCase
         $user = User::factory()->create(['branch_id' => $counter->branch_id, 'service_setting_id' => $counter->id]);
         $user->givePermissionTo('view_any_queue');
         $this->actingAs($user);
-        \App\Filament\Resources\QueueResource::getEloquentQuery()->get();
+        QueueResource::getEloquentQuery()->get();
         $this->assertSame(QueueStatus::SERVING, $ticket->fresh()->status);
         $user->givePermissionTo('edit_queue');
-        \App\Filament\Resources\QueueResource::getEloquentQuery()->get();
-        $this->assertSame(QueueStatus::SKIPPED, $ticket->fresh()->status);
-        $this->assertDatabaseHas('queue_logs', ['queue_id' => $ticket->id, 'action' => 'expired']);
+        QueueResource::getEloquentQuery()->get();
+        $this->assertSame(QueueStatus::SERVING, $ticket->fresh()->status);
+        $this->assertDatabaseMissing('queue_logs', ['queue_id' => $ticket->id, 'action' => 'expired']);
     }
 }

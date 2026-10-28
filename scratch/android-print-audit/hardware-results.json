@@ -1,0 +1,21 @@
+{
+  "printer": "EPSON L6290 Series",
+  "uri": "ipps://192.168.11.128:631/ipp/print",
+  "certificate_sha256": "e3cef44bb1e31c89884930fd7f73bda1b5aa72e0e5d7aedd327859989267db9a",
+  "matching_certificate": "accepted",
+  "changed_certificate": "rejected before IPP request",
+  "attributes": [
+    "attributes-charset: [utf-8]",
+    "attributes-natural-language: [en]",
+    "media-supported: [iso_a4_210x297mm, na_index-4x6_4x6in, na_5x7_5x7in, na_govt-letter_8x10in, om_hivision_101.6x180.6mm, iso_a5_148x210mm, iso_a6_105x148mm, na_legal_8.5x14in, na_letter_8.5x11in, jis_b5_182x257mm, jis_b6_128x182mm, oe_photo-l_3.5x5in, jpn_hagaki_100x148mm, na_number-10_4.125x9.5in, iso_c6_114x162mm, iso_dl_110x220mm, na_index-5x8_5x8in, na_foolscap_8.5x13in, om_16k_195x270mm, om_indian-legal_215x345mm, custom_min_89x127mm, custom_max_215.9x1200mm]",
+    "document-format-supported: [application/octet-stream, image/pwg-raster, image/urf, image/jpeg, application/vnd.epson.escpr]",
+    "printer-is-accepting-jobs: [true]",
+    "printer-make-and-model: [EPSON L6290 Series]",
+    "printer-state: [3]",
+    "printer-state-reasons: [none]",
+    "pwg-raster-document-type-supported: [sgray_8, srgb_8]",
+    "pwg-raster-document-resolution-supported: [300x300 units=3, 600x600 units=3]",
+    "Read-only IPP check completed. No print job sent."
+  ],
+  "physical_print": "not sent; read-only Get-Printer-Attributes"
+}

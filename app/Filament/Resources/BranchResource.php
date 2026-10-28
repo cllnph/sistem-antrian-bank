@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\BranchResource\Pages\ManageBranches;
 use App\Models\Branch;
+use App\Services\IntegrityRules;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -72,7 +73,7 @@ class BranchResource extends Resource
         return $schema->components([
             Section::make('Informasi Kantor Cabang')
                 ->columnSpanFull()
-                ->description('Profil kantor cabang bank, tipe unit kerja, dan konfigurasi jam operasional.')
+                ->description('Profil dan tipe kantor cabang. Atur jam layanan melalui menu Waktu Operasional.')
                 ->schema([
                     TextInput::make('code')
                         ->label('Kode Cabang')
@@ -100,10 +101,6 @@ class BranchResource extends Resource
                     TextInput::make('phone')
                         ->label('Nomor Telepon')
                         ->placeholder('Contoh: 0251-8321098'),
-                    TextInput::make('operating_hours')
-                        ->label('Jam Layanan')
-                        ->default('Senin – Jumat (08.00 – 15.00 WIB)')
-                        ->required(),
                     Textarea::make('address')
                         ->label('Alamat Lengkap (Muncul di Struk & TV Display)')
                         ->placeholder('Alamat lengkap kantor cabang...')
@@ -128,6 +125,10 @@ class BranchResource extends Resource
                 IconColumn::make('is_active')->label('Aktif')->boolean(),
             ])
             ->recordActions([
+                Action::make('printing')
+                    ->label('Cetak & Printer')
+                    ->icon(Heroicon::OutlinedPrinter)
+                    ->url(fn (Branch $record) => PrintAgentResource::forBranchUrl($record)),
                 Action::make('kiosk_link')
                     ->label('Kiosk')
                     ->icon(Heroicon::Ticket)
@@ -142,9 +143,9 @@ class BranchResource extends Resource
                     ->openUrlInNewTab(),
                 EditAction::make(),
                 DeleteAction::make()
-                        ->disabled(fn ($record) => \App\Services\IntegrityRules::deletionReason($record) !== null)
-                        ->tooltip(fn ($record) => \App\Services\IntegrityRules::deletionReason($record))
-                        ->before(fn ($record, DeleteAction $action) => \App\Services\IntegrityRules::beforeDelete($record, $action)),
+                    ->disabled(fn ($record) => IntegrityRules::deletionReason($record) !== null)
+                    ->tooltip(fn ($record) => IntegrityRules::deletionReason($record))
+                    ->before(fn ($record, DeleteAction $action) => IntegrityRules::beforeDelete($record, $action)),
             ]);
     }
 

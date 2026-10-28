@@ -2,48 +2,21 @@
 
 namespace App\Services;
 
-use App\Enums\QueueStatus;
 use App\Models\Branch;
-use App\Models\Queue;
-use App\Models\QueueLog;
 use App\Models\User;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Str;
 
 class QueueResetService
 {
-    public static function reset(User $actor, ?int $branchId = null, ?string $service = null): int
+    public static function reset(User $actor, ?int $branchId = null, ?string $service = null, ?string $expectedPeriod = null, ?string $requestId = null): int
     {
-        abort_unless($actor->is_active && $actor->can('reset_queues'), 403);
-        if (! $actor->hasRole('admin')) {
-            abort_unless($actor->branch_id && ($branchId === null || $branchId === (int) $actor->branch_id), 403);
-            $branchId = (int) $actor->branch_id;
-        }
-        if ($branchId !== null) {
-            Branch::findOrFail($branchId);
-        }
-        if ($service !== null && ! in_array($service, ['cs', 'teller', 'umum'], true)) {
-            throw ValidationException::withMessages(['service' => 'Jenis layanan tidak valid.']);
-        }
+        abort_unless($actor->is_active && $actor->hasRole('admin') && $actor->can('reset_queues'), 403);
+        abort_unless($branchId !== null, 422, 'Pilih satu cabang untuk reset.');
+        abort_if($service !== null, 422, 'Reset berlaku untuk seluruh layanan dalam satu periode cabang.');
+        $branch = Branch::findOrFail($branchId);
+        $periods = app(QueuePeriods::class);
+        $state = $periods->ensure($branch);
 
-        return DB::transaction(function () use ($actor, $branchId, $service): int {
-            $queues = Queue::withoutGlobalScopes()
-                ->when($branchId !== null, fn ($query) => $query->where('branch_id', $branchId))
-                ->when($service !== null, fn ($query) => $query->whereHas('serviceSetting', fn ($settings) => $settings->where('service', $service)))
-                ->whereIn('status', [QueueStatus::WAITING, QueueStatus::CALLED, QueueStatus::SERVING])
-                ->lockForUpdate()->get();
-
-            foreach ($queues as $queue) {
-                $previous = $queue->status->value;
-                $queue->update(['status' => QueueStatus::SKIPPED]);
-                QueueLog::create([
-                    'queue_id' => $queue->id, 'branch_id' => $queue->branch_id,
-                    'actor_id' => $actor->id, 'action' => 'reset',
-                    'payload' => ['previous_status' => $previous],
-                ]);
-            }
-
-            return $queues->count();
-        });
+        return $periods->reset($branch, $actor, $expectedPeriod ?? $state->period_id, $requestId ?? (string) Str::uuid());
     }
 }

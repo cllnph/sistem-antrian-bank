@@ -25,6 +25,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        \Illuminate\Support\Facades\RateLimiter::for('print-agent', function ($request) {
+            return \Illuminate\Cache\RateLimiting\Limit::perMinute(300)->by(hash('sha256', (string) $request->header('X-Print-Agent', $request->ip())));
+        });
         if (! app()->runningInConsole()) {
             @ini_set('max_execution_time', '120');
         }

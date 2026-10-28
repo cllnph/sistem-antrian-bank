@@ -27,7 +27,7 @@
             position: relative;
             transition: font-size 0.2s ease;
         }
-        @media (max-height: 560px), (max-width: 900px) {
+        @media (max-height: 560px), (max-width: 1024px) {
             html, body {
                 height: auto;
                 min-height: 100%;
@@ -1029,6 +1029,16 @@
 
     <main class="kiosk-content">
 
+        <dialog id="browserReceiptDialog" style="position:fixed;inset:0;margin:auto;width:min(460px,calc(100vw - 32px));max-height:90vh;overflow:auto;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:16px;padding:20px;color:#0f172a;">
+            <h2 id="browserReceiptTitle" style="font-size:20px;margin:0 0 8px;">Tiket siap dicetak</h2>
+            <p id="browserReceiptMessage" role="status" style="font-size:14px;margin-bottom:12px;">Pilih printer PC ini pada dialog cetak. Jika dibatalkan, cetak kembali tiket yang sama di sini.</p>
+            <iframe id="browserReceiptFrame" title="Struk tiket" style="width:100%;height:420px;border:1px solid #e2e8f0;background:white;"></iframe>
+            <div style="display:flex;justify-content:flex-end;gap:12px;flex-wrap:wrap;margin-top:12px;">
+                <button type="button" onclick="document.getElementById('browserReceiptDialog').close()" style="padding:10px 16px;cursor:pointer;">Tutup</button>
+                <button type="button" id="browserReceiptPrint" onclick="printBrowserReceipt()" disabled style="padding:10px 16px;cursor:pointer;background:#1e40af;color:white;border:0;border-radius:8px;">Cetak tiket ini</button>
+            </div>
+        </dialog>
+
         @if(session('error'))
             <div style="background: #fef2f2; border: 1.5px solid #fecaca; color: #b91c1c; padding: 14px 20px; border-radius: 16px; margin-bottom: 20px; text-align: center; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px;">
                 <x-heroicon-o-exclamation-triangle class="kiosk-icon kiosk-icon-lg" style="color: #dc2626;" />
@@ -1037,7 +1047,7 @@
         @endif
 
         @php
-            $isServiceHours = \App\Services\KioskHours::isOpen();
+            $isServiceHours = $operations['is_open'];
 
             $tellerActive = ($tellerActive ?? (isset($settings['teller']) ? $settings['teller']->is_active : true)) && $isServiceHours;
             $csActive = ($csActive ?? (isset($settings['cs']) ? $settings['cs']->is_active : true)) && $isServiceHours;
@@ -1089,7 +1099,7 @@
                             <div class="closed-notice" style="display: flex; align-items: center; justify-content: center; gap: 6px;">
                                 @if(!$isServiceHours)
                                     <x-heroicon-o-clock class="kiosk-icon" style="color: #dc2626;" />
-                                    <span>Pengambilan tiket dibuka Senin - Jumat (04.00 - 18.00 WIB).</span>
+                                    <span>Pengambilan tiket: {{ $operations['label'] }}.</span>
                                 @else
                                     <x-heroicon-o-exclamation-triangle class="kiosk-icon" style="color: #dc2626;" />
                                     <span>Layanan Customer Service sedang tidak aktif saat ini.</span>
@@ -1142,7 +1152,7 @@
                             <div class="closed-notice" style="display: flex; align-items: center; justify-content: center; gap: 6px;">
                                 @if(!$isServiceHours)
                                     <x-heroicon-o-clock class="kiosk-icon" style="color: #dc2626;" />
-                                    <span>Pengambilan tiket dibuka Senin - Jumat (04.00 - 18.00 WIB).</span>
+                                    <span>Pengambilan tiket: {{ $operations['label'] }}.</span>
                                 @else
                                     <x-heroicon-o-exclamation-triangle class="kiosk-icon" style="color: #dc2626;" />
                                     <span>Layanan Teller sedang tidak aktif saat ini.</span>
@@ -1185,22 +1195,68 @@
         </div>
     </div>
 
+    <button type="button" id="startFreshRequest" hidden onclick="startFreshRequest()" style="padding:10px 16px;cursor:pointer;position:relative;z-index:20">Mulai permintaan baru</button>
     <!-- Bank DP Taspen Footer -->
     <footer class="kiosk-footer">
         <div class="footer-waiting-text">Tekan tombol untuk mengambil tiket</div>
         <div class="footer-hours-item">
             <x-heroicon-o-clock class="kiosk-icon kiosk-icon-sm text-emerald" />
-            <span><strong>Jam Layanan:</strong> Senin - Jumat (08.00 - 15.00 WIB)</span>
+            {{-- Informasi layanan nasabah; jadwal sistem tetap diatur per cabang. --}}
+            <span><strong>Jam Layanan:</strong> Senin–Jumat 08.00–15.00 WIB</span>
         </div>
+        <button type="button" id="lastBrowserTicket" hidden onclick="reopenLastReceipt()" style="cursor:pointer;color:#004B9C;background:transparent;border:0;text-decoration:underline;font-size:12px;">Cetak tiket terakhir</button>
+        <button type="button" id="kioskRequestRecovery" hidden onclick="location.reload()" style="cursor:pointer;padding:8px;">Muat ulang sesi, pertahankan permintaan</button>
     </footer>
 
     <script>
+        const issuanceContext = @json($issuanceContext);
+        const pagePeriodId = @json($operations['period_id']);
+        let operations = @json($operations);
+        let serverOffset = Date.parse(operations.server_time) - Date.now();
+        let periodExpired = false;
+        function expiredPeriod() {
+            periodExpired = true;
+            document.getElementById('startFreshRequest').hidden = false;
+            document.getElementById('kioskRequestRecovery').hidden = false;
+        }
+        function startFreshRequest() {
+            if (!confirm('Periode permintaan lama telah berakhir. Muat halaman periode terbaru? Setelah dimuat, pilih layanan untuk mengambil nomor baru.')) return;
+            sessionStorage.removeItem('ticket-request-{{ $branch->id }}');
+            sessionStorage.removeItem('browser-ticket-{{ $branch->id }}');
+            location.reload();
+        }
+        function applyOperations(data) {
+            if (!data.operations) return;
+            operations = data.operations;
+            serverOffset = Date.parse(operations.server_time) - Date.now();
+            if (operations.period_id !== pagePeriodId) {
+                if (!isTakingTicket && !sessionStorage.getItem('ticket-request-{{ $branch->id }}') && !document.querySelector('dialog[open]')) { location.reload(); return; }
+                expiredPeriod();
+            }
+            if (isTakingTicket) return;
+            document.querySelectorAll('.btn-take').forEach(btn => {
+                const active = !periodExpired && operations.is_open && data.settings?.[btn.dataset.service]?.is_active;
+                btn.disabled = !active;
+                btn.querySelector('span').textContent = active ? 'Ambil Tiket' : (periodExpired ? 'Periode berakhir' : 'Layanan Tutup');
+                const card = btn.closest('.service-card');
+                card.classList.toggle('disabled', !active);
+                const note = card.querySelector('.closed-notice');
+                if (note) note.style.display = active ? 'none' : 'flex';
+            });
+        }
+        // Android browsers that support fetch may not yet expose AbortSignal.timeout.
+        // Clear each timer when its request completes, including failed requests.
+        function kioskFetch(address, options = {}, timeoutMs = 15000) {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), timeoutMs);
+            return fetch(address, {...options, signal: controller.signal})
+                .finally(() => clearTimeout(timer));
+        }
+
         function updateClock() {
-            const now = new Date();
-            const hours = String(now.getHours()).padStart(2, '0');
-            const minutes = String(now.getMinutes()).padStart(2, '0');
-            document.getElementById('clockTime').textContent = `${hours}.${minutes} WIB`;
-            document.getElementById('clockDate').textContent = now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+            const now = new Date(Date.now() + serverOffset);
+            document.getElementById('clockTime').textContent = new Intl.DateTimeFormat('id-ID', {timeZone:'Asia/Jakarta',hour:'2-digit',minute:'2-digit',hour12:false}).format(now) + ' WIB';
+            document.getElementById('clockDate').textContent = now.toLocaleDateString('id-ID', {timeZone:'Asia/Jakarta',weekday:'long',day:'numeric',month:'long',year:'numeric'});
         }
         updateClock();
         setInterval(updateClock, 1000);
@@ -1214,10 +1270,11 @@
         function refreshLiveQueueData() {
             if (isRefreshingQueueData) return;
             isRefreshingQueueData = true;
-            return fetch("{{ url('/api/display/data/' . $branch->code) }}", { signal: AbortSignal.timeout(15000) })
+            return kioskFetch("{{ url('/api/display/data/' . $branch->code) }}")
                 .then(res => res.json())
                 .then(data => {
                     if (!data) return;
+                    applyOperations(data);
                     
                     // Update Teller Live Stats
                     const tellerServingElem = document.getElementById('liveServingTeller');
@@ -1369,11 +1426,18 @@
                     btn.innerHTML = originalHtml; btn.disabled = false; btn.style.opacity = '1'; isTakingTicket = false;
                     return;
                 }
+                // A pending request from the earlier installer/UI has no context yet.
+                // A deliberate reload supplies it while preserving the original UUID.
+                if (pending && !pending.issuance_context) {
+                    pending.issuance_context = issuanceContext;
+                    pending.period_id = pagePeriodId;
+                    sessionStorage.setItem(pendingKey, JSON.stringify(pending));
+                }
                 if (!pending) {
                     const bytes = crypto.getRandomValues(new Uint8Array(16));
                     bytes[6] = (bytes[6] & 15) | 64; bytes[8] = (bytes[8] & 63) | 128;
                     const hex = [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
-                    pending = {service: serviceKey, request_id: `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`};
+                    pending = {service: serviceKey, issuance_context: issuanceContext, period_id: pagePeriodId, request_id: `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`};
                     sessionStorage.setItem(pendingKey, JSON.stringify(pending));
                 }
             } catch (error) {
@@ -1382,9 +1446,8 @@
                 return;
             }
 
-            fetch("{{ url('/ambil-nomor') }}", {
+            kioskFetch(@json(route('queue.store-number', ['branch' => $branch->code], false)), {
                 method: "POST",
-                signal: AbortSignal.timeout(20000),
                 headers: {
                     "Content-Type": "application/json",
                     "Accept": "application/json",
@@ -1393,17 +1456,21 @@
                 body: JSON.stringify({
                     service: serviceKey,
                     request_id: pending.request_id,
+                    issuance_context: pending.issuance_context || '',
                     branch_id: {{ $branch->id }}
                 })
-            })
+            }, 20000)
             .then(async res => ({status: res.status, data: await res.json()}))
             .then(async ({status, data}) => {
                 if (data && data.success) {
                     if (await printIssuedTicket(data.ticket, data)) sessionStorage.removeItem(pendingKey);
                     refreshLiveQueueData();
                 } else {
-                    if (data?.success === false || [403, 409, 419, 422].includes(status)) sessionStorage.removeItem(pendingKey);
-                    alert(data?.message || 'Mohon maaf, layanan sedang sibuk. Silakan coba tekan tombol kembali.');
+                    if (![403, 409, 410, 419].includes(status) && (data?.success === false || status === 422)) sessionStorage.removeItem(pendingKey);
+                    if (status === 410) expiredPeriod();
+                    if ([403, 409, 419].includes(status)) document.getElementById('kioskRequestRecovery').hidden = false;
+                    const explanation = status === 419 ? 'Sesi halaman kedaluwarsa. Muat ulang halaman lalu tekan layanan yang sama; permintaan sebelumnya tetap diperiksa.' : data?.message;
+                    alert(explanation || 'Mohon maaf, layanan sedang sibuk. Silakan coba tekan tombol kembali.');
                 }
             })
             .catch(err => {
@@ -1415,12 +1482,83 @@
                 btn.disabled = false;
                 btn.style.opacity = '1';
                 isTakingTicket = false;
+                refreshLiveQueueData();
             });
         }
 
-        // Printing runs exclusively on the server. Polling never opens a PDF or browser print dialog.
+        const lastReceiptKey = 'browser-ticket-{{ $branch->id }}';
+        let lastBrowserReceipt = null;
+        try { lastBrowserReceipt = JSON.parse(sessionStorage.getItem(lastReceiptKey) || 'null'); } catch (error) {}
+        if (lastBrowserReceipt) document.getElementById('lastBrowserTicket').hidden = false;
+
+        function printBrowserReceipt() {
+            const frame = document.getElementById('browserReceiptFrame');
+            try {
+                if (!frame.contentDocument.querySelector('meta[name="bank-ticket"]')) throw new Error('receipt');
+                frame.contentWindow.focus();
+                frame.contentWindow.print();
+                document.getElementById('browserReceiptMessage').textContent = 'Periksa hasil pada printer. Jika dialog dibatalkan atau kertas belum keluar, gunakan Cetak tiket ini untuk nomor yang sama.';
+            } catch (error) {
+                document.getElementById('browserReceiptMessage').textContent = 'Struk belum dapat dibuka. Tekan Cetak tiket terakhir untuk memuat ulang nomor yang sama.';
+            }
+        }
+
+        function openBrowserReceipt(receipt, autoPrint = false) {
+            lastBrowserReceipt = receipt;
+            try { sessionStorage.setItem(lastReceiptKey, JSON.stringify(receipt)); } catch (error) {}
+            document.getElementById('lastBrowserTicket').hidden = false;
+            document.getElementById('browserReceiptTitle').textContent = 'Tiket ' + receipt.ticket;
+            const dialog = document.getElementById('browserReceiptDialog');
+            if (!dialog.open) dialog.showModal();
+            const frame = document.getElementById('browserReceiptFrame');
+            document.getElementById('browserReceiptPrint').disabled = true;
+            document.getElementById('browserReceiptMessage').textContent = 'Memuat struk. Pilih printer PC ini pada dialog cetak.';
+            frame.onload = () => {
+                try {
+                    if (!frame.contentDocument.querySelector('meta[name="bank-ticket"]')) throw new Error('receipt');
+                    document.getElementById('browserReceiptPrint').disabled = false;
+                    if (autoPrint) printBrowserReceipt();
+                } catch (error) {
+                    document.getElementById('browserReceiptMessage').textContent = 'Struk belum dapat dimuat. Tekan Cetak tiket terakhir untuk mencoba lagi tanpa membuat nomor baru.';
+                }
+            };
+            try {
+                const status = awaitReceiptStatus(receipt.id);
+                status.then(ok => { if (ok) frame.src = receipt.url; });
+            } catch (error) { document.getElementById('browserReceiptMessage').textContent = 'Koneksi terputus. Periksa kembali nomor yang sama.'; }
+        }
+
+        async function awaitReceiptStatus(id) {
+            try {
+                const response = await kioskFetch(@json(url('/print-jobs')) + '/' + id, {headers:{Accept:'application/json'}});
+                if (response.status === 410) {
+                    expiredPeriod();
+                    document.getElementById('browserReceiptMessage').textContent = 'Periode tiket sudah berakhir. Struk telah dibersihkan. Tutup dialog dan pilih Mulai permintaan baru.';
+                    return false;
+                }
+                if (!response.ok) {
+                    document.getElementById('browserReceiptMessage').textContent = 'Struk tidak dapat diakses dari browser ini. Periksa sesi atau hubungi petugas.';
+                    return false;
+                }
+                return true;
+            } catch (error) {
+                document.getElementById('browserReceiptMessage').textContent = 'Koneksi terputus. Tekan Cetak tiket terakhir untuk memeriksa nomor yang sama.';
+                return false;
+            }
+        }
+
+        function reopenLastReceipt() {
+            if (lastBrowserReceipt) openBrowserReceipt(lastBrowserReceipt);
+        }
+
         async function printIssuedTicket(finalTicketNumber, data = null) {
             let job = data?.print_job;
+            if (job?.transport === 'browser' && job.receipt_url) {
+                // Replaying a response must not reopen a print dialog for a ticket already shown.
+                const autoPrint = lastBrowserReceipt?.id !== job.id;
+                openBrowserReceipt({id: job.id, ticket: finalTicketNumber, url: job.receipt_url}, autoPrint);
+                return true;
+            }
             if (!job?.status_url) {
                 alert('Tiket ' + finalTicketNumber + ' sudah diterbitkan. Hubungi petugas untuk memeriksa cetaknya.');
                 return false;
@@ -1429,7 +1567,8 @@
             while (['queued', 'processing'].includes(job.status) && Date.now() < deadline) {
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 try {
-                    const response = await fetch(job.status_url, {headers: {'Accept': 'application/json'}, signal: AbortSignal.timeout(10000)});
+                    const response = await kioskFetch(job.status_url, {headers: {'Accept': 'application/json'}}, 10000);
+                    if (response.status === 410) { expiredPeriod(); alert('Periode tiket sudah berakhir. Pilih Mulai permintaan baru untuk periode berikutnya.'); return false; }
                     if (response.ok) job = (await response.json()).print_job;
                 } catch (error) { /* Keep the same request; never issue a replacement. */ }
             }

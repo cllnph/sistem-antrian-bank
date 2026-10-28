@@ -2,18 +2,24 @@
 
 namespace Tests\Feature;
 
+use App\Filament\Resources\ServiceSettingResource\Pages\ManageServiceSettings;
+use App\Filament\Resources\UserResource\Pages\ManageUsers;
 use App\Models\Branch;
 use App\Models\Queue;
 use App\Models\ServiceSetting;
 use App\Models\User;
+use App\Services\QueuePeriods;
+use Carbon\Carbon;
 use Database\Seeders\RoleAndPermissionSeeder;
+use Filament\Auth\Pages\Login;
+use Filament\Panel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
+use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\Test;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
-use Livewire\Livewire;
-use App\Filament\Resources\UserResource\Pages\ManageUsers;
-use App\Filament\Resources\ServiceSettingResource\Pages\ManageServiceSettings;
 
 class SecurityFixesTest extends TestCase
 {
@@ -25,7 +31,7 @@ class SecurityFixesTest extends TestCase
     {
         parent::setUp();
         $this->seed(RoleAndPermissionSeeder::class);
-        $this->travelTo(\Carbon\Carbon::parse('2026-10-14 09:00:00', 'Asia/Jakarta'));
+        $this->travelTo(Carbon::parse('2026-10-14 09:00:00', 'Asia/Jakarta'));
         $this->branch = Branch::create([
             'code' => '001', 'slug' => 'pusat', 'name' => 'Kantor Pusat',
             'type' => 'Kantor Pusat', 'is_active' => true,
@@ -68,7 +74,7 @@ class SecurityFixesTest extends TestCase
         $teller = User::factory()->create(['is_active' => true, 'branch_id' => $this->branch->id]);
         $teller->assignRole('teller');
 
-        $this->assertTrue($teller->canAccessPanel(new \Filament\Panel()));
+        $this->assertTrue($teller->canAccessPanel(new Panel));
     }
 
     #[Test]
@@ -107,7 +113,7 @@ class SecurityFixesTest extends TestCase
             'is_active' => false,
         ]);
 
-        Livewire::test(\Filament\Auth\Pages\Login::class)
+        Livewire::test(Login::class)
             ->fillForm(['email' => $user->email, 'password' => 'password123'])
             ->call('authenticate')
             ->assertHasErrors(['data.email']);
@@ -146,7 +152,7 @@ class SecurityFixesTest extends TestCase
                 'roles' => Role::findByName('teller')->id,
                 'password' => 'SecretPass123!',
             ])->assertHasNoActionErrors();
-        $this->assertTrue(\Illuminate\Support\Facades\Hash::check('SecretPass123!', $targetUser->fresh()->password));
+        $this->assertTrue(Hash::check('SecretPass123!', $targetUser->fresh()->password));
         $this->assertStringNotContainsString('SecretPass123!', json_encode(session()->all()));
         $this->assertStringNotContainsString('SecretPass123!', $component->html());
     }
@@ -156,13 +162,13 @@ class SecurityFixesTest extends TestCase
     {
         ServiceSetting::create(['branch_id' => $this->branch->id, 'label' => 'Loket Teller', 'counter_name' => 'Loket Teller', 'service' => 'teller', 'is_active' => true]);
 
-        $response = $this->post(route('queue.store-number'), ['service' => 'teller']);
-        $response->assertSessionHas('ticket');
-        $ticket1 = session('ticket');
+        $response = $this->issueTicket(route('queue.store-number'), ['service' => 'teller']);
+        $response->assertOk();
+        $ticket1 = $response->json('ticket');
 
-        $response2 = $this->post(route('queue.store-number'), ['service' => 'teller']);
-        $response2->assertSessionHas('ticket');
-        $ticket2 = session('ticket');
+        $response2 = $this->issueTicket(route('queue.store-number'), ['service' => 'teller']);
+        $response2->assertOk();
+        $ticket2 = $response2->json('ticket');
 
         $this->assertNotEquals($ticket1, $ticket2);
     }
@@ -208,8 +214,8 @@ class SecurityFixesTest extends TestCase
     {
         $umumSetting = ServiceSetting::create(['branch_id' => $this->branch->id, 'label' => 'Loket Umum', 'counter_name' => 'Loket Umum', 'service' => 'umum', 'is_active' => true]);
 
-        $this->post(route('queue.store-number'), ['service' => 'umum'])
-            ->assertSessionHas('ticket');
+        $this->issueTicket(route('queue.store-number'), ['service' => 'umum'])
+            ->assertOk();
 
         $this->assertDatabaseHas('queues', [
             'service_setting_id' => $umumSetting->id,
@@ -250,11 +256,10 @@ class SecurityFixesTest extends TestCase
         $admin->assignRole('admin');
 
         $this->actingAs($admin)
-            ->post(route('admin.queues.reset'))
+            ->post(route('admin.queues.reset'), ['branch_id' => $this->branch->id, 'period_id' => app(QueuePeriods::class)->ensure($this->branch)->period_id, 'request_id' => (string) Str::uuid()])
             ->assertRedirect();
 
-        $this->assertDatabaseCount('queues', 1);
-        $this->assertDatabaseHas('queues', ['number' => 'T-001', 'status' => 'skipped']);
-        $this->assertDatabaseHas('queue_logs', ['action' => 'reset', 'actor_id' => $admin->id]);
+        $this->assertDatabaseCount('queues', 0);
+        $this->assertDatabaseCount('queue_logs', 0);
     }
 }

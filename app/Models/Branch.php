@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Branch extends Model
 {
@@ -22,12 +23,23 @@ class Branch extends Model
     {
         return [
             'is_active' => 'boolean',
+            'weekly_schedule' => 'array',
         ];
     }
 
     public function serviceSettings(): HasMany
     {
         return $this->hasMany(ServiceSetting::class, 'branch_id');
+    }
+
+    public function printAgents(): HasMany
+    {
+        return $this->hasMany(PrintAgent::class);
+    }
+
+    public function queueState(): HasOne
+    {
+        return $this->hasOne(BranchQueueState::class, 'branch_id');
     }
 
     public function users(): HasMany

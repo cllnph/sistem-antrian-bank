@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Branch;
+use Carbon\Carbon;
 use Database\Seeders\BranchContactSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -14,12 +15,12 @@ class ReleaseAuditTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->travelTo(\Carbon\Carbon::parse('2026-10-14 09:00:00', 'Asia/Jakarta'));
+        $this->travelTo(Carbon::parse('2026-10-14 09:00:00', 'Asia/Jakarta'));
     }
 
     public function test_invalid_ticket_request_returns_json_validation_errors(): void
     {
-        $this->postJson('/ambil-nomor', ['branch_id' => 999999])
+        $this->issueTicket('/ambil-nomor', ['branch_id' => 999999])
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['service', 'branch_id']);
         $this->assertDatabaseCount('queues', 0);
@@ -32,7 +33,7 @@ class ReleaseAuditTest extends TestCase
             'type' => 'Kantor Cabang', 'is_active' => false,
         ]);
 
-        $this->postJson('/ambil-nomor', ['branch_id' => $branch->id, 'service' => 'teller'])
+        $this->issueTicket('/ambil-nomor', ['branch_id' => $branch->id, 'service' => 'teller'])
             ->assertNotFound()
             ->assertHeader('Content-Type', 'application/json');
         $this->assertDatabaseCount('queues', 0);

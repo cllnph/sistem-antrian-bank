@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\UserResource\Pages;
 
 use App\Filament\Resources\UserResource;
+use App\Models\Role;
 use App\Models\User;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
@@ -14,7 +15,6 @@ use Filament\Resources\Pages\ManageRecords;
 use Filament\Schemas\Components\Section;
 use Filament\Support\Icons\Heroicon;
 use Spatie\Permission\Models\Permission;
-use App\Models\Role;
 
 class ManageUsers extends ManageRecords
 {
@@ -153,15 +153,15 @@ class ManageUsers extends ManageRecords
                                 ->columns(2),
                         ]),
 
-                    Section::make('5. Kontrol & Laporan Operasional')
+                    Section::make('5. Kompatibilitas Peran Lama')
                         ->columnSpanFull()
-                        ->description('Akses ke dasbor pusat kendali dan laporan aktivitas.')
+                        ->description('Kode izin lama dipertahankan. Ringkasan sekarang tersedia di Dashboard sesuai jenis akun dan cabangnya.')
                         ->schema([
                             CheckboxList::make('perm_report')
                                 ->hiddenLabel()
                                 ->default([])
                                 ->options([
-                                    'view_control_center' => 'Lihat Pusat Kendali',
+                                    'view_control_center' => 'Izin pusat kendali lama (kompatibilitas)',
                                 ])
                                 ->columns(2),
                         ]),

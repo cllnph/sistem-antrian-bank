@@ -1,7 +1,9 @@
 <?php
 
 use App\Http\Controllers\DisplayController;
+use App\Http\Controllers\KioskPrintingController;
 use App\Http\Controllers\LoketController;
+use App\Http\Controllers\PrintJobController;
 use App\Http\Controllers\QueueController;
 use App\Http\Controllers\RoleController;
 use App\Models\User;
@@ -54,7 +56,7 @@ Route::middleware(['auth'])->group(function () {
             && $currentUser->id !== $user->id && ! Impersonation::isImpersonating(), 403,
             'Mode petugas hanya dapat dibuka oleh admin untuk akun aktif lain. Kembali ke admin sebelum berpindah akun.');
 
-        session()->put('impersonate.back_to', route('filament.admin.pages.admin-control-center'));
+        session()->put('impersonate.back_to', \App\Filament\Pages\BranchOperations::getUrl());
         abort_unless(Impersonation::enter($currentUser, $user), 500, 'Mode petugas gagal dibuka.');
         session()->regenerate();
 
@@ -77,7 +79,12 @@ Route::get('/api/display/data/{branch?}', [DisplayController::class, 'getDisplay
 Route::get('/ambil-nomor/{branch?}', [QueueController::class, 'takeNumber'])->name('queue.take-number');
 Route::post('/ambil-nomor/{branch?}', [QueueController::class, 'storeNumber'])->name('queue.store-number');
 Route::get('/verifikasi/{queueId}', [QueueController::class, 'verifyTicket'])->whereNumber('queueId')->name('queue.verify');
-Route::get('/print-jobs/{printJob}', [\App\Http\Controllers\PrintJobController::class, 'show'])->whereUuid('printJob')->name('print-jobs.show');
+Route::get('/print-jobs/{printJob}', [PrintJobController::class, 'show'])->whereUuid('printJob')->name('print-jobs.show');
+Route::get('/print-jobs/{printJob}/receipt', [PrintJobController::class, 'receipt'])->whereUuid('printJob')->name('print-jobs.receipt');
+Route::post('/kiosk-printing/{branch}/browser', [KioskPrintingController::class, 'browser'])->whereNumber('branch')->name('kiosk-printing.browser');
+Route::post('/kiosk-printing/{branch}/paper', [KioskPrintingController::class, 'paper'])->whereNumber('branch')->name('kiosk-printing.paper');
+Route::get('/kiosk-connect', [KioskPrintingController::class, 'connect'])->name('kiosk-connect');
+Route::post('/kiosk-connect', [KioskPrintingController::class, 'pair'])->middleware('throttle:30,1')->name('kiosk-connect.pair');
 
 // Officer Consoles -> Filament Queue Resource
 Route::middleware(['auth', 'role:cs'])->group(function () {
@@ -99,3 +106,6 @@ Route::middleware(['auth', 'role:teller'])->group(function () {
     Route::post('/queue/skip/teller', [QueueController::class, 'skipTeller'])->name('queue.skip.teller');
     Route::post('/queue/recall/teller', [QueueController::class, 'recallTeller'])->name('queue.recall.teller');
 });
+
+Route::get('/favicon.{extension}', fn () => response()->noContent(204, ['Cache-Control' => 'no-store']))
+    ->where('extension', 'ico|svg');

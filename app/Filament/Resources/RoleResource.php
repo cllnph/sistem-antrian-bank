@@ -3,6 +3,8 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\RoleResource\Pages\ManageRoles;
+use App\Models\Role;
+use App\Services\IntegrityRules;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\CheckboxList;
@@ -13,7 +15,6 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\Role;
 
 class RoleResource extends Resource
 {
@@ -91,7 +92,7 @@ class RoleResource extends Resource
                     'delete_user' => 'Hapus Pengguna',
                     'view_any_service_setting' => 'Lihat Pengaturan Loket',
                     'edit_service_setting' => 'Edit Loket Layanan',
-                    'view_control_center' => 'Lihat Pusat Kendali',
+                    'view_control_center' => 'Izin pusat kendali lama (kompatibilitas)',
                     'reset_queues' => 'Reset Antrean',
                     default => $record->name,
                 }),
@@ -106,9 +107,9 @@ class RoleResource extends Resource
             TextColumn::make('permissions_count')->label('Jumlah Hak Akses')->counts('permissions')->badge()->color('info'),
             TextColumn::make('created_at')->label(fn () => __('app.created_at'))->dateTime('d M Y H:i'),
         ])->recordActions([EditAction::make(), DeleteAction::make()
-                        ->disabled(fn ($record) => \App\Services\IntegrityRules::deletionReason($record) !== null)
-                        ->tooltip(fn ($record) => \App\Services\IntegrityRules::deletionReason($record))
-                        ->before(fn ($record, DeleteAction $action) => \App\Services\IntegrityRules::beforeDelete($record, $action))]);
+            ->disabled(fn ($record) => IntegrityRules::deletionReason($record) !== null)
+            ->tooltip(fn ($record) => IntegrityRules::deletionReason($record))
+            ->before(fn ($record, DeleteAction $action) => IntegrityRules::beforeDelete($record, $action))]);
     }
 
     public static function getPages(): array

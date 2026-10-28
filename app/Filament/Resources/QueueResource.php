@@ -4,10 +4,13 @@ namespace App\Filament\Resources;
 
 use App\Enums\QueueStatus;
 use App\Filament\Resources\QueueResource\Pages\ManageQueues;
+use App\Models\Branch;
 use App\Models\Queue;
 use App\Models\QueueLog;
 use App\Models\Scopes\ServiceSettingScope;
 use App\Models\ServiceSetting;
+use App\Services\IntegrityRules;
+use App\Services\Printing\TicketPrinting;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
@@ -15,17 +18,16 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
-use Filament\Schemas\Schema;
 use Filament\Schemas\Components\Utilities\Get;
-use Illuminate\Validation\Rule;
+use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class QueueResource extends Resource
 {
@@ -79,27 +81,7 @@ class QueueResource extends Resource
     {
         $user = auth()->user();
 
-        // Only an operational user may close leftover tickets; read-only views
-        // must not mutate records. Keep an audit trail for each expiration.
-        $expireQuery = Queue::query()
-            ->whereDate('created_at', '<', now()->toDateString())
-            ->whereIn('status', [QueueStatus::WAITING, QueueStatus::CALLED, QueueStatus::SERVING]);
-        if ($user && ! $user->hasRole('admin') && $user->branch_id) {
-            $expireQuery->where('branch_id', $user->branch_id);
-        }
-        if ($user?->can('edit_queue')) {
-            DB::transaction(function () use ($expireQuery, $user): void {
-                foreach ($expireQuery->lockForUpdate()->get() as $expired) {
-                    $expired->update(['status' => QueueStatus::SKIPPED]);
-                    QueueLog::create([
-                        'queue_id' => $expired->id, 'branch_id' => $expired->branch_id,
-                        'actor_id' => $user->id, 'action' => 'expired',
-                    ]);
-                }
-            });
-        }
-
-        $query = parent::getEloquentQuery()->with(['serviceSetting', 'servedBy', 'branch']);
+        $query = parent::getEloquentQuery()->currentPeriod()->with(['serviceSetting', 'servedBy', 'branch']);
 
         if ($user?->hasRole('admin_cabang')) {
             return $query->where('branch_id', $user->branch_id ?? 0);
@@ -150,7 +132,7 @@ class QueueResource extends Resource
                     }
                 })
                 ->whereIn('status', [QueueStatus::CALLED, QueueStatus::SERVING])
-                ->whereDate('created_at', now()->toDateString())
+                ->currentPeriod()
                 ->latest('called_at')
                 ->value('id');
 
@@ -161,7 +143,7 @@ class QueueResource extends Resource
             // 2. Prioritas 2: Tepat 1 antrean MENUNGGU berikutnya (paling awal / FIFO) pada layanan loket ini
             $nextWaitingId = (clone $baseQuery)
                 ->where('status', QueueStatus::WAITING)
-                ->whereDate('created_at', now()->toDateString())
+                ->currentPeriod()
                 ->oldest('id')
                 ->value('id');
 
@@ -182,7 +164,7 @@ class QueueResource extends Resource
         $assignedServiceId = $user?->service_setting_id;
 
         return $schema->components([
-            TextInput::make('number')->label(fn () => __('app.queue_number'))->disabledOn('edit')->required(),
+            TextInput::make('number')->label(fn () => __('app.queue_number'))->disabled()->dehydrated(false)->placeholder('Otomatis sesuai periode cabang'),
             Select::make('branch_id')
                 ->label('Cabang')->disabledOn('edit')->live()
                 ->afterStateUpdated(fn ($set) => $set('service_setting_id', null))
@@ -251,10 +233,6 @@ class QueueResource extends Resource
                 TextColumn::make('called_at')->label(fn () => __('app.call_time'))->dateTime($isAdmin ? 'd M Y H:i' : 'H:i')->placeholder('-'),
                 TextColumn::make('servedBy.name')->label(fn () => __('app.active_staff'))->wrap()->visible($isAdmin)->toggleable(isToggledHiddenByDefault: true)->placeholder('-'),
             ])->filters([
-                Filter::make('today')
-                    ->label('Antrean hari ini')
-                    ->default()
-                    ->query(fn (Builder $query): Builder => $query->whereDate('created_at', now()->toDateString())),
                 SelectFilter::make('branch_id')
                     ->label('Filter Cabang')
                     ->relationship('branch', 'name')
@@ -273,10 +251,13 @@ class QueueResource extends Resource
                     ->authorize(fn (Queue $record) => auth()->user()?->can('print', $record) ?? false)
                     ->requiresConfirmation()
                     ->modalDescription('Cetak nomor tiket yang sama. Periksa kertas dan printer terlebih dahulu agar tidak menghasilkan salinan ganda.')
-                    ->action(function (Queue $record): void {
+                    ->action(function (Queue $record) {
                         abort_unless(auth()->user()?->can('print', $record), 403);
                         try {
-                            app(\App\Services\Printing\TicketPrinting::class)->reprint($record, auth()->user());
+                            $job = app(TicketPrinting::class)->reprint($record, auth()->user(), request());
+                            if ($job->transport === 'browser') {
+                                return redirect()->route('print-jobs.receipt', ['printJob' => $job->id, 'autoprint' => 1]);
+                            }
                             Notification::make()->title('Cetak ulang '.$record->number.' dijadwalkan')->body('Nomor antrean tetap sama. Periksa hasil pada printer.')->success()->send();
                         } catch (\RuntimeException $e) {
                             Notification::make()->title('Cetak ulang belum dapat diproses')->body($e->getMessage())->danger()->send();
@@ -290,9 +271,10 @@ class QueueResource extends Resource
                     ->action(function (Queue $record): void {
                         abort_unless(auth()->user()?->can('update', $record), 403);
                         DB::transaction(function () use ($record): void {
+                            Branch::whereKey($record->branch_id)->lockForUpdate()->firstOrFail();
                             $targetSettingId = auth()->user()?->service_setting_id ?? $record->service_setting_id;
                             ServiceSetting::whereKey($targetSettingId)->lockForUpdate()->firstOrFail();
-                            $lockedRecord = Queue::query()->where('id', $record->id)->lockForUpdate()->first();
+                            $lockedRecord = Queue::query()->currentPeriod()->where('id', $record->id)->lockForUpdate()->first();
                             if (! $lockedRecord || $lockedRecord->status !== QueueStatus::WAITING) {
                                 return;
                             }
@@ -304,14 +286,14 @@ class QueueResource extends Resource
                             if ($targetSettingId) {
                                 $myCounterHasActiveQueue = Queue::query()
                                     ->where('service_setting_id', $targetSettingId)
-                                    ->whereDate('created_at', now()->toDateString())
+                                    ->currentPeriod()
                                     ->whereIn('status', [QueueStatus::CALLED, QueueStatus::SERVING])
                                     ->lockForUpdate()
                                     ->exists();
                             } else {
                                 $myCounterHasActiveQueue = Queue::query()
                                     ->where('served_by', auth()->id())
-                                    ->whereDate('created_at', now()->toDateString())
+                                    ->currentPeriod()
                                     ->whereIn('status', [QueueStatus::CALLED, QueueStatus::SERVING])
                                     ->lockForUpdate()
                                     ->exists();
@@ -355,7 +337,8 @@ class QueueResource extends Resource
                     ->action(function (Queue $record): void {
                         abort_unless(auth()->user()?->can('update', $record), 403);
                         DB::transaction(function () use ($record): void {
-                            $lockedRecord = Queue::query()->where('id', $record->id)->lockForUpdate()->first();
+                            Branch::whereKey($record->branch_id)->lockForUpdate()->firstOrFail();
+                            $lockedRecord = Queue::query()->currentPeriod()->where('id', $record->id)->lockForUpdate()->first();
                             if ($lockedRecord && in_array($lockedRecord->status, [QueueStatus::CALLED, QueueStatus::SERVING], true)) {
                                 $targetSettingId = auth()->user()?->service_setting_id ?? $lockedRecord->service_setting_id;
                                 abort_unless(auth()->user()?->can('update', $lockedRecord), 403);
@@ -388,7 +371,8 @@ class QueueResource extends Resource
                     ->action(function (Queue $record): void {
                         abort_unless(auth()->user()?->can('update', $record), 403);
                         DB::transaction(function () use ($record): void {
-                            $lockedRecord = Queue::query()->where('id', $record->id)->lockForUpdate()->first();
+                            Branch::whereKey($record->branch_id)->lockForUpdate()->firstOrFail();
+                            $lockedRecord = Queue::query()->currentPeriod()->where('id', $record->id)->lockForUpdate()->first();
                             if ($lockedRecord && in_array($lockedRecord->status, [QueueStatus::CALLED, QueueStatus::SERVING], true)) {
                                 abort_unless(auth()->user()?->can('update', $lockedRecord), 403);
                                 $lockedRecord->update(['status' => QueueStatus::COMPLETED]);
@@ -410,7 +394,8 @@ class QueueResource extends Resource
                     ->action(function (Queue $record): void {
                         abort_unless(auth()->user()?->can('update', $record), 403);
                         DB::transaction(function () use ($record): void {
-                            $lockedRecord = Queue::query()->where('id', $record->id)->lockForUpdate()->first();
+                            Branch::whereKey($record->branch_id)->lockForUpdate()->firstOrFail();
+                            $lockedRecord = Queue::query()->currentPeriod()->where('id', $record->id)->lockForUpdate()->first();
                             if ($lockedRecord && in_array($lockedRecord->status, [QueueStatus::WAITING, QueueStatus::CALLED, QueueStatus::SERVING], true)) {
                                 abort_unless(auth()->user()?->can('update', $lockedRecord), 403);
                                 $lockedRecord->update(['status' => QueueStatus::SKIPPED]);
@@ -426,9 +411,9 @@ class QueueResource extends Resource
                     }),
                 ActionGroup::make([
                     DeleteAction::make()
-                        ->disabled(fn ($record) => \App\Services\IntegrityRules::deletionReason($record) !== null)
-                        ->tooltip(fn ($record) => \App\Services\IntegrityRules::deletionReason($record))
-                        ->before(fn ($record, DeleteAction $action) => \App\Services\IntegrityRules::beforeDelete($record, $action)),
+                        ->disabled(fn ($record) => IntegrityRules::deletionReason($record) !== null)
+                        ->tooltip(fn ($record) => IntegrityRules::deletionReason($record))
+                        ->before(fn ($record, DeleteAction $action) => IntegrityRules::beforeDelete($record, $action)),
                 ])->visible(fn () => auth()->user()?->hasRole('admin') ?? false),
             ])->defaultSort('id', 'desc');
     }

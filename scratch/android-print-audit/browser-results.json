@@ -1,0 +1,38 @@
+[
+  {
+    "device": "Android phone",
+    "size": [
+      360,
+      800
+    ],
+    "cs_teller": "passed",
+    "double_tap": "one issuance per service",
+    "without_AbortSignal_timeout": "passed",
+    "browser_print_calls": 0,
+    "page_errors": []
+  },
+  {
+    "device": "Android tablet landscape",
+    "size": [
+      1024,
+      768
+    ],
+    "cs_teller": "passed",
+    "double_tap": "one issuance per service",
+    "without_AbortSignal_timeout": "passed",
+    "browser_print_calls": 0,
+    "page_errors": []
+  },
+  {
+    "device": "Android tablet portrait",
+    "size": [
+      800,
+      1280
+    ],
+    "cs_teller": "passed",
+    "double_tap": "one issuance per service",
+    "without_AbortSignal_timeout": "passed",
+    "browser_print_calls": 0,
+    "page_errors": []
+  }
+]

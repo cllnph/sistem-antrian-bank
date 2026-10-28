@@ -2,7 +2,13 @@
 
 namespace App\Filament\Resources\QueueResource\Pages;
 
+use App\Enums\QueueStatus;
 use App\Filament\Resources\QueueResource;
+use App\Models\Branch;
+use App\Models\Queue;
+use App\Models\QueueLog;
+use App\Services\KioskHours;
+use App\Services\QueuePeriods;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Notifications\Notification;
@@ -43,8 +49,16 @@ class ManageQueues extends ManageRecords
 
             CreateAction::make()
                 ->label('Tambah Antrean Manual')
-                ->mutateFormDataUsing(fn (array $data): array => array_replace($data, ['status' => \App\Enums\QueueStatus::WAITING]))
-                ->after(fn (\App\Models\Queue $record) => \App\Models\QueueLog::create([
+                ->mutateFormDataUsing(function (array $data): array {
+                    abort_unless(auth()->user()?->is_active && auth()->user()?->hasRole('admin'), 403);
+                    $branch = Branch::findOrFail($data['branch_id']);
+                    app(QueuePeriods::class)->ensure($branch);
+                    abort_unless(KioskHours::isOpen($branch), 422, 'Cabang di luar jam layanan.');
+                    unset($data['number'], $data['period_id']);
+
+                    return array_replace($data, ['status' => QueueStatus::WAITING]);
+                })
+                ->after(fn (Queue $record) => QueueLog::create([
                     'queue_id' => $record->id, 'branch_id' => $record->branch_id,
                     'actor_id' => auth()->id(), 'action' => 'created', 'payload' => ['source' => 'manual'],
                 ]))
@@ -60,7 +74,7 @@ class ManageQueues extends ManageRecords
         }
 
         return [
-            'all' => Tab::make('Semua Riwayat')
+            'all' => Tab::make('Periode Berjalan')
                 ->icon(Heroicon::OutlinedListBullet),
             'waiting' => Tab::make('Sedang Menunggu')
                 ->icon(Heroicon::OutlinedClock)

@@ -2,18 +2,29 @@
 
 namespace App\Console\Commands;
 
-use App\Models\Queue;
+use App\Models\Branch;
+use App\Services\QueuePeriods;
 use Illuminate\Console\Command;
+use Illuminate\Support\Str;
 
 class ResetDailyQueue extends Command
 {
-    protected $signature = 'queue:reset';
-    protected $description = 'Reset seluruh antrean uji coba untuk memulai hari baru (dimulai dari CS-001 & T-001)';
+    protected $signature = 'queue:reset {--branch= : Kode cabang yang akan direset}';
 
-    public function handle()
+    protected $description = 'Reset satu periode cabang secara eksplisit (CS-001 dan T-001).';
+
+    public function handle(QueuePeriods $periods): int
     {
-        Queue::truncate();
-        $this->info('✅ Seluruh antrean berhasil di-reset! Nomor antrean Kiosk kembali ke CS-001 & T-001.');
-        return 0;
+        if (! $this->option('branch')) {
+            $this->error('Wajib menentukan --branch=KODE. Reset global tidak tersedia.');
+
+            return self::FAILURE;
+        }
+        $branch = Branch::where('code', $this->option('branch'))->firstOrFail();
+        $state = $periods->ensure($branch);
+        $count = $periods->reset($branch, null, $state->period_id, (string) Str::uuid());
+        $this->info('Periode cabang '.$branch->code.' direset; '.$count.' antrean ditutup.');
+
+        return self::SUCCESS;
     }
 }

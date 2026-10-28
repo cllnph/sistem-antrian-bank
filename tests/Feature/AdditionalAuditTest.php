@@ -3,8 +3,13 @@
 namespace Tests\Feature;
 
 use App\Filament\Resources\ServiceSettingResource;
-use App\Filament\Widgets\QueueStatsWidget;
-use App\Models\{Branch, Queue, User, ServiceSetting};
+use App\Models\Branch;
+use App\Models\Queue;
+use App\Models\Role;
+use App\Models\ServiceSetting;
+use App\Models\User;
+use App\Services\BranchDashboard;
+use Carbon\Carbon;
 use Database\Seeders\RoleAndPermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
@@ -18,7 +23,7 @@ class AdditionalAuditTest extends TestCase
     {
         parent::setUp();
         $this->seed(RoleAndPermissionSeeder::class);
-        $this->travelTo(\Carbon\Carbon::parse('2026-10-14 09:00', 'Asia/Jakarta'));
+        $this->travelTo(Carbon::parse('2026-10-14 09:00', 'Asia/Jakarta'));
     }
 
     private function branch(string $code): Branch
@@ -38,6 +43,7 @@ class AdditionalAuditTest extends TestCase
         $user = User::factory()->create();
         $user->assignRole('admin');
         $this->actingAs($user);
+
         return $user;
     }
 
@@ -88,10 +94,10 @@ class AdditionalAuditTest extends TestCase
         $other = $this->branch('102');
         $this->counter($own);
         $this->counter($other);
-        $this->postJson('/ambil-nomor/101', ['branch_id' => $other->id, 'service' => 'teller'])
+        $this->issueTicket('/ambil-nomor/101', ['branch_id' => $other->id, 'service' => 'teller'])
             ->assertUnprocessable()->assertJsonValidationErrors('branch_id');
         $this->assertDatabaseCount('queues', 0);
-        $this->postJson('/ambil-nomor/101', ['branch_id' => $own->id, 'service' => 'teller'])
+        $this->issueTicket('/ambil-nomor/101', ['branch_id' => $own->id, 'service' => 'teller'])
             ->assertOk()->assertJsonPath('branch_id', $own->id);
     }
 
@@ -100,7 +106,7 @@ class AdditionalAuditTest extends TestCase
         $branch = $this->branch('101');
         $first = $this->counter($branch);
         $second = $this->counter($branch, 'Teller 2');
-        $old = Queue::create(['branch_id' => $branch->id, 'service_setting_id' => $first->id, 'number' => 'T-001']);
+        $old = new Queue(['branch_id' => $branch->id, 'service_setting_id' => $first->id, 'number' => 'T-001']);
         $old->forceFill(['created_at' => now()->subDay()])->save();
         Queue::create(['branch_id' => $branch->id, 'service_setting_id' => $first->id, 'number' => 'T-001']);
         $ticket = Queue::create(['branch_id' => $branch->id, 'service_setting_id' => $second->id, 'number' => 'T-002']);
@@ -119,9 +125,7 @@ class AdditionalAuditTest extends TestCase
         $user->givePermissionTo(['view_any_queue', 'view_any_service_setting']);
         $this->actingAs($user);
         $this->assertSame(0, ServiceSettingResource::getEloquentQuery()->count());
-        $widget = app(QueueStatsWidget::class);
-        $stats = (new \ReflectionMethod($widget, 'getStats'))->invoke($widget);
-        $this->assertSame(0, $stats[3]->getValue());
+        $this->assertCount(0, app(BranchDashboard::class)->data($user)['branches']);
     }
 
     public function test_role_api_rejects_permissions_from_another_guard_without_partial_role_creation(): void
@@ -148,7 +152,7 @@ class AdditionalAuditTest extends TestCase
     public function test_role_api_failure_rolls_back_and_hides_internal_exception_details(): void
     {
         $this->admin();
-        \App\Models\Role::created(function ($role): void {
+        Role::created(function ($role): void {
             if ($role->name === 'rollback_role') {
                 throw new \RuntimeException('Internal database details must stay private');
             }

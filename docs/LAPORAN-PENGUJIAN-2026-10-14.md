@@ -166,6 +166,22 @@ Panduan terbaru: `docs/PANDUAN-CETAK-KIOSK.md`. Bukti Edge: `scratch/server-prin
 
 ## Ringkasan untuk atasan
 
+### Penghubung cetak cabang untuk deployment terpusat
+
+Pada 15 Oktober 2026 ditambahkan jalur penghubung Windows per cabang. Aplikasi pusat dapat menyajikan PDF dari hosting Linux/Windows; penghubung mengambil tugas melalui HTTPS dan mencetak menggunakan printer lokal cabang. Menu **Penghubung Cetak Cabang** menggunakan Filament native dan hanya dapat dikelola admin pusat. Nama printer dipilih saat pemasangan. Penghubung tidak memerlukan PHP/XAMPP atau port masuk di cabang.
+
+Pemasangan memakai enrollment satu kali yang berlaku 15 menit. Token permanen hanya disimpan sebagai hash di server dan terenkripsi DPAPI pada PC cabang, dengan folder terbatas pengguna/SYSTEM. API memeriksa identitas perangkat dan cakupan cabang. HTTP ditolak di luar local/testing. Klaim job, unduhan PDF dengan SHA256, izin mulai satu kali, serta konfirmasi hasil dipisahkan; jurnal lokal dan lease mencegah pengiriman ulang otomatis setelah koneksi/proses terputus. Akses dapat dicabut dan installer baru dapat mengganti PC/printer. Jalur server lokal tetap aktif pada konfigurasi sekarang; belum ada cabang operasional yang dipindahkan oleh implementasi ini.
+
+Bukti pengujian penghubung:
+
+- **155 tes, 982 assertion**, 0 error/failure pada suite lengkap (`scratch/filament-native-audit/branch-agents.xml`). Tambahan 17 tes meliputi otorisasi, pemisahan cabang, enrollment, HTTPS, kondisi offline, izin mulai satu kali, timeout lease, idempotensi hasil, PDF, cetak ulang, installer, dan menu native.
+- Dua program PowerShell sebenarnya untuk Bogor dan Depok menggunakan executable printer pengganti: masing-masing mengambil job sendiri dan mengirim satu pemanggilan native. Restart setelah izin mulai dan timeout native berakhir `unknown`, tanpa pengiriman kedua. Penghubung offline menghasilkan 503 tanpa tiket baru. Bukti `scratch/branch-agent-audit/client-results.json`.
+- Browser Edge: membuat record melalui modal native dan mengunduh ZIP installer berhasil, tanpa error JavaScript. Aktivasi dan pencabutan akses juga lulus. Bukti `ui-results.json`, `installer-results.json`, serta screenshot pada folder yang sama.
+- Installer yang diunduh dipasang pada profil Windows uji: SumatraPDF resmi terverifikasi, enrollment terkonsumsi, kredensial DPAPI dan ACL privat dibuat, shortcut startup tersembunyi terdaftar, dan heartbeat pemeriksaan printer nyata berhasil. Program tidak memproses job fisik; startup uji dibersihkan setelah verifikasi.
+- Sintaks helper PowerShell/PHP dan Pint pada file baru/layanan cetak lulus. Layout kiosk dan display tidak diubah. Worker lokal yang sudah dipakai pengguna tetap sehat dan kiosk aktual menghasilkan HTTP 200; printer default Windows tetap Microsoft Print to PDF saat verifikasi.
+
+**Batas penerimaan:** pengujian penghubung memakai database SQLite terpisah, printer pengganti untuk job, dan server uji lokal. Belum ada deployment ke domain hosting sebenarnya atau pengujian jaringan kantor lain. UAT kertas pada penghubung cabang sesudah deployment tetap diperlukan; bukti fisik yang sebelumnya dikonfirmasi pengguna berasal dari jalur server lokal. Panduan pemasangan/deployment: `docs/PANDUAN-PENGHUBUNG-CABANG.md`.
+
 Perbaikan pemeriksaan printer 15 Oktober 2026: pengguna memastikan ITPRINTER menyala dan terhubung. Pemeriksaan melalui PowerShell pernah melewati timeout 10 detik, walaupun pemeriksaan lain melaporkan siap. Pemeriksa native Winspool ditambahkan dan dipasang melalui installer. Uji baca langsung berhasil pada ITPRINTER (status 0, sekitar 0,5 detik); nama tidak terdaftar, PDF, dan Fax ditolak. Jalur PHP beserta pemeriksaan worker berhasil sekitar 0,6 detik. Tidak ada cetakan fisik yang dikirim oleh pemeriksaan status ini. Bukti: `scratch/server-print-audit/native-check-results.json`.
 
 Regresi setelah perubahan pemeriksa printer: **22 tes server-printing, 118 assertion lulus**. Pint pada file PHP yang diubah dan sintaks installer lulus. Suite lengkap 138 tes di atas adalah hasil sebelum perubahan pemeriksa native; tidak dijalankan ulang untuk perubahan ini. Konfirmasi keluarnya kertas masih menunggu hasil percobaan pengguna melalui tombol kiosk.

@@ -43,7 +43,8 @@ class QueuePolicy
 
     private function sameService(User $user, Queue $queue): bool
     {
-        return $user->branch_id && (int) $user->branch_id === (int) $queue->branch_id
+        return $queue->period_id === \App\Models\BranchQueueState::find($queue->branch_id)?->period_id
+            && $user->branch_id && (int) $user->branch_id === (int) $queue->branch_id
             && $user->serviceSetting && $queue->serviceSetting
             && (int) $user->serviceSetting->branch_id === (int) $user->branch_id
             && $user->serviceSetting->service === $queue->serviceSetting->service;

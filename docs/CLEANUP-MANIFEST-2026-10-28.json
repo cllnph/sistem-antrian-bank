@@ -1,0 +1,170 @@
+{
+  "date": "2026-10-28",
+  "archive": "C:\\Users\\anggi\\AppData\\Local\\BankDPTaspenBackups\\operations-cleanup-20261028\\retired-files.zip",
+  "files": [
+    {
+      "path": "app/Filament/Widgets/ControlCenterStaffWidget.php",
+      "reason": "Retired widget; dashboard and branch detail now supply the supported summaries.",
+      "reference_scan": "no active references outside retired candidates",
+      "matched_retired_files": [
+        "app/Filament/Widgets/ControlCenterStaffWidget.php"
+      ],
+      "sha256": "304968abfd45e8ef61e7ea58601ed91cc4f154c4f56e305da75540f5b1761a70",
+      "bytes": 2003
+    },
+    {
+      "path": "app/Filament/Widgets/RecentQueueActivityWidget.php",
+      "reason": "Retired widget; dashboard and branch detail now supply the supported summaries.",
+      "reference_scan": "no active references outside retired candidates",
+      "matched_retired_files": [
+        "app/Filament/Widgets/RecentQueueActivityWidget.php"
+      ],
+      "sha256": "bab4d17fb12aa421029e5e0894e1d227c06152c59655477e6c9e2e155af8ee82",
+      "bytes": 1871
+    },
+    {
+      "path": "app/Filament/Widgets/QueueStatsWidget.php",
+      "reason": "Retired widget; dashboard and branch detail now supply the supported summaries.",
+      "reference_scan": "no active references outside retired candidates",
+      "matched_retired_files": [
+        "app/Filament/Widgets/QueueStatsWidget.php"
+      ],
+      "sha256": "4410849b1d77594d5a628db4d024c434015e3fdefe451bb69b1ab6ecc52f845a",
+      "bytes": 2223
+    },
+    {
+      "path": "app/Filament/Widgets/QueueOperationsWidget.php",
+      "reason": "Retired widget; dashboard and branch detail now supply the supported summaries.",
+      "reference_scan": "no active references outside retired candidates",
+      "matched_retired_files": [
+        "app/Filament/Widgets/QueueOperationsWidget.php"
+      ],
+      "sha256": "27047c79277108127ac2b54174157920424ae3a4282bf9fd29efa497c6bf2d0f",
+      "bytes": 2335
+    },
+    {
+      "path": "resources/views/filament/widgets/queue-operations.blade.php",
+      "reason": "Retired widget; dashboard and branch detail now supply the supported summaries.",
+      "reference_scan": "no active references outside retired candidates",
+      "matched_retired_files": [
+        "app/Filament/Widgets/QueueOperationsWidget.php"
+      ],
+      "sha256": "023eeb15eb6593e2a206af2ac6cfcb97499e9c4ebb8cbdc07f2939e337ce32e4",
+      "bytes": 123
+    },
+    {
+      "path": "app/Http/Controllers/AdminAuthController.php",
+      "reason": "Unrouted legacy controller; authentication and account management use Filament.",
+      "reference_scan": "no active references outside retired candidates",
+      "matched_retired_files": [
+        "app/Http/Controllers/AdminAuthController.php"
+      ],
+      "sha256": "2272a414969a7339df5ff94a52a6dd3a1e294633299453c69b93cb298acd12cd",
+      "bytes": 5351
+    },
+    {
+      "path": "app/Http/Controllers/AdminUserController.php",
+      "reason": "Unrouted legacy controller; authentication and account management use Filament.",
+      "reference_scan": "no active references outside retired candidates",
+      "matched_retired_files": [
+        "app/Http/Controllers/AdminUserController.php"
+      ],
+      "sha256": "21956dae3629305602826bb9c6dc175632b9f1cc74fb74f69f4d638efd4af4a0",
+      "bytes": 4396
+    },
+    {
+      "path": "app/Http/Controllers/AdminDashboardController.php",
+      "reason": "Unrouted legacy controller; authentication and account management use Filament.",
+      "reference_scan": "no active references outside retired candidates",
+      "matched_retired_files": [
+        "app/Http/Controllers/AdminDashboardController.php"
+      ],
+      "sha256": "7f2006ea6706e158aae5810478472114ce5cc5fda939d89f815a6ee66f51eb8c",
+      "bytes": 341
+    },
+    {
+      "path": "public/images/bank-dp-taspen-logo-backup.png",
+      "reason": "Unreferenced backup/preview image; active production assets are preserved.",
+      "reference_scan": "no active references outside retired candidates",
+      "matched_retired_files": [],
+      "sha256": "e255cf6406aedb9db8a7f335fabb9a3f98034556f9f95ba5ba8c6aed97398b3c",
+      "bytes": 96865
+    },
+    {
+      "path": "public/images/bank-dp-taspen-logo-original.png",
+      "reason": "Unreferenced backup/preview image; active production assets are preserved.",
+      "reference_scan": "no active references outside retired candidates",
+      "matched_retired_files": [],
+      "sha256": "e255cf6406aedb9db8a7f335fabb9a3f98034556f9f95ba5ba8c6aed97398b3c",
+      "bytes": 96865
+    },
+    {
+      "path": "public/images/bg-ambil-nomor-dark-backup.png",
+      "reason": "Unreferenced backup/preview image; active production assets are preserved.",
+      "reference_scan": "no active references outside retired candidates",
+      "matched_retired_files": [],
+      "sha256": "0e0cc99114cc4644192aac43818c3fec4a63241296b125e359b3b0cd82397731",
+      "bytes": 1426539
+    },
+    {
+      "path": "public/kiosk_preview.png",
+      "reason": "Unreferenced backup/preview image; active production assets are preserved.",
+      "reference_scan": "no active references outside retired candidates",
+      "matched_retired_files": [],
+      "sha256": "c047e856f167b30ad78c2b49b17a053f4c68fddedf1195b70b526bc00f50cf66",
+      "bytes": 650460
+    },
+    {
+      "path": "scratch/branch-print-full-tests.txt",
+      "reason": "Superseded generated test report; retained in external archive, new acceptance reports replace it.",
+      "reference_scan": "no active references outside retired candidates",
+      "matched_retired_files": [],
+      "sha256": "9b0f09edc2c898785f9ec0618cfbff82830026400b8a9a12b956b81c5aef36d6",
+      "bytes": 206
+    },
+    {
+      "path": "scratch/branch-print-page-tests.txt",
+      "reason": "Superseded generated test report; retained in external archive, new acceptance reports replace it.",
+      "reference_scan": "no active references outside retired candidates",
+      "matched_retired_files": [],
+      "sha256": "9aee71db978023a850516278bdeac8eb611962041e7a959e39dfed7f4f4c0760",
+      "bytes": 192
+    },
+    {
+      "path": "scratch/branch-print-tests.txt",
+      "reason": "Superseded generated test report; retained in external archive, new acceptance reports replace it.",
+      "reference_scan": "no active references outside retired candidates",
+      "matched_retired_files": [],
+      "sha256": "49a4960e665784b943e8f87e2d637bfd635929865c89dd517b45c0c943382d67",
+      "bytes": 200
+    },
+    {
+      "path": "scratch/device-history-audit-regression.xml",
+      "reason": "Superseded generated test report; retained in external archive, new acceptance reports replace it.",
+      "reference_scan": "no active references outside retired candidates",
+      "matched_retired_files": [],
+      "sha256": "81ce3e1d036ebdcd4b2a37839b57ee207c4a607a90a309e133c96775ad5fae60",
+      "bytes": 55845
+    },
+    {
+      "path": "public/favicon.ico",
+      "reason": "Explicit transparent SVG now used; compatibility favicon route redirects to that asset.",
+      "reference_scan": "no active references outside retired candidates",
+      "matched_retired_files": [
+        "routes/web.php"
+      ],
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  ],
+  "preserved": [
+    "all migrations",
+    "database",
+    ".env and active configuration",
+    "vendor and node_modules",
+    "printing helpers",
+    "agent",
+    "android-print-agent including signing keys",
+    "active source test harnesses"
+  ]
+}

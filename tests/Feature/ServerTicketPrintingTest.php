@@ -45,11 +45,12 @@ class ServerTicketPrintingTest extends TestCase
         $this->withSession(['_token' => 'print-test-token']);
         $this->withCookie(config('session.cookie'), session()->getId());
         $this->withCredentials();
+        $this->usePrintTransport($this->office, 'server');
     }
 
     private function issue(string $service = 'cs', ?string $uuid = null): TestResponse
     {
-        return $this->postJson('/ambil-nomor/101', ['service' => $service, 'request_id' => $uuid ?? (string) Str::uuid(), 'branch_id' => $this->office->id]);
+        return $this->issueTicket('/ambil-nomor/101', ['service' => $service, 'request_id' => $uuid ?? (string) Str::uuid(), 'branch_id' => $this->office->id]);
     }
 
     private function process(PrintJob $job): void
@@ -254,7 +255,7 @@ class ServerTicketPrintingTest extends TestCase
         $original = PrintJob::firstOrFail();
         $this->process($original);
         $this->office->update(['address' => 'NEW ADDRESS']);
-        $reprint = app(TicketPrinting::class)->reprint($original->ticket, $officer);
+        $reprint = app(TicketPrinting::class)->reprint($original->ticket, $officer, $this->printingRequest());
         $this->assertSame($original->queue_id, $reprint->queue_id);
         $this->assertSame($original->snapshot, $reprint->snapshot);
         $this->assertSame($original->id, $reprint->original_job_id);
@@ -305,7 +306,7 @@ class ServerTicketPrintingTest extends TestCase
 
     public function test_browser_cannot_override_printer_file_or_receipt(): void
     {
-        $this->postJson('/ambil-nomor/101', [
+        $this->issueTicket('/ambil-nomor/101', [
             'service' => 'cs', 'request_id' => (string) Str::uuid(), 'printer_name' => 'Microsoft Print to PDF',
             'executable' => 'evil.exe', 'file' => 'C:/private.txt', 'snapshot' => ['ticket' => 'FORGED'],
         ])->assertOk()->assertJsonPath('ticket', 'CS-001');

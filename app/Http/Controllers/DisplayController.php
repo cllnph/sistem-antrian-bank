@@ -7,6 +7,8 @@ use App\Models\Branch;
 use App\Models\Queue;
 use App\Models\Scopes\ServiceSettingScope;
 use App\Models\ServiceSetting;
+use App\Services\OperationStatus;
+use App\Services\QueuePeriods;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -58,7 +60,9 @@ class DisplayController extends Controller
             $branch = Branch::query()->where('code', '001')->first() ?? Branch::first();
         }
 
-        $branchId = $branch?->id;
+        abort_unless($branch, 404);
+        app(QueuePeriods::class)->ensure($branch);
+        $branchId = $branch->id;
 
         $activeSettings = ServiceSetting::query()
             ->when($branchId, fn ($q) => $q->where('branch_id', $branchId))
@@ -82,40 +86,40 @@ class DisplayController extends Controller
 
         $csWaitCount = empty($csIds) ? 0 : $baseQueueQuery()
             ->whereIn('service_setting_id', $csIds)
-            ->whereDate('created_at', $today)
+            ->currentPeriod()
             ->where('status', QueueStatus::WAITING)
             ->count();
 
         $tellerWaitCount = empty($tellerIds) ? 0 : $baseQueueQuery()
             ->whereIn('service_setting_id', $tellerIds)
-            ->whereDate('created_at', $today)
+            ->currentPeriod()
             ->where('status', QueueStatus::WAITING)
             ->count();
 
         $umumWaitCount = empty($umumIds) ? 0 : $baseQueueQuery()
             ->whereIn('service_setting_id', $umumIds)
-            ->whereDate('created_at', $today)
+            ->currentPeriod()
             ->where('status', QueueStatus::WAITING)
             ->count();
 
         // Earliest waiting ticket to be called next
         $nextCsWaiting = empty($csIds) ? null : $baseQueueQuery()
             ->whereIn('service_setting_id', $csIds)
-            ->whereDate('created_at', $today)
+            ->currentPeriod()
             ->where('status', QueueStatus::WAITING)
             ->orderBy('id', 'asc')
             ->value('number');
 
         $nextTellerWaiting = empty($tellerIds) ? null : $baseQueueQuery()
             ->whereIn('service_setting_id', $tellerIds)
-            ->whereDate('created_at', $today)
+            ->currentPeriod()
             ->where('status', QueueStatus::WAITING)
             ->orderBy('id', 'asc')
             ->value('number');
 
         $nextUmumWaiting = empty($umumIds) ? null : $baseQueueQuery()
             ->whereIn('service_setting_id', $umumIds)
-            ->whereDate('created_at', $today)
+            ->currentPeriod()
             ->where('status', QueueStatus::WAITING)
             ->orderBy('id', 'asc')
             ->value('number');
@@ -124,7 +128,7 @@ class DisplayController extends Controller
         $calledQueues = empty($settingIds) ? collect() : $baseQueueQuery()
             ->with(['servedBy.serviceSetting'])
             ->whereIn('service_setting_id', $settingIds)
-            ->whereDate('created_at', $today)
+            ->currentPeriod()
             ->whereIn('status', [QueueStatus::CALLED, QueueStatus::SERVING])
             ->orderBy('called_at', 'desc')
             ->get()
@@ -174,37 +178,15 @@ class DisplayController extends Controller
         $tellerSetting = $activeSettings->firstWhere('service', 'teller');
         $umumSetting = $activeSettings->firstWhere('service', 'umum');
 
-        $maxTellerSeq = empty($tellerIds) ? 0 : ($baseQueueQuery()
-            ->whereIn('service_setting_id', $tellerIds)
-            ->whereDate('created_at', $today)
-            ->where('number', 'like', 'T-%')
-            ->get()
-            ->map(function ($q) {
-                $parts = explode('-', $q->number);
-
-                return (int) end($parts);
-            })
-            ->max() ?? 0);
-        $nextTellerNumber = sprintf('T-%03d', $maxTellerSeq + 1);
-
-        $maxCsSeq = empty($csIds) ? 0 : ($baseQueueQuery()
-            ->whereIn('service_setting_id', $csIds)
-            ->whereDate('created_at', $today)
-            ->where('number', 'like', 'CS-%')
-            ->get()
-            ->map(function ($q) {
-                $parts = explode('-', $q->number);
-
-                return (int) end($parts);
-            })
-            ->max() ?? 0);
-        $nextCsNumber = sprintf('CS-%03d', $maxCsSeq + 1);
+        $nextTellerNumber = app(QueuePeriods::class)->nextNumber($branch, 'teller');
+        $nextCsNumber = app(QueuePeriods::class)->nextNumber($branch, 'cs');
 
         $allCsCalled = $calledQueues->filter(fn ($val, $key) => in_array($key, $csIds))->flatten(1)->sortByDesc('called_at');
         $allTellerCalled = $calledQueues->filter(fn ($val, $key) => in_array($key, $tellerIds))->flatten(1)->sortByDesc('called_at');
         $allUmumCalled = $calledQueues->filter(fn ($val, $key) => in_array($key, $umumIds))->flatten(1)->sortByDesc('called_at');
 
         return [
+            'operations' => app(OperationStatus::class)->forBranch($branch),
             'branch' => [
                 'id' => $branch->id,
                 'code' => $branch->code,

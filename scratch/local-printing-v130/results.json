@@ -1,0 +1,120 @@
+{
+  "physical_print": "not sent; no physical printer available",
+  "browsers": {
+    "edge": {
+      "local_without_registration": "passed",
+      "session_regeneration": "passed",
+      "csrf_uuid_recovery": "passed",
+      "paper58": "passed",
+      "local_agent_pairing": "passed",
+      "identical_names_stay_on_correct_pc": "passed",
+      "javascript_errors": []
+    },
+    "chrome": {
+      "local_without_registration": "passed",
+      "session_regeneration": "passed",
+      "csrf_uuid_recovery": "passed",
+      "paper58": "passed",
+      "local_agent_pairing": "passed",
+      "identical_names_stay_on_correct_pc": "passed",
+      "javascript_errors": []
+    },
+    "firefox": {
+      "local_without_registration": "passed",
+      "session_regeneration": "passed",
+      "csrf_uuid_recovery": "passed",
+      "paper58": "passed",
+      "local_agent_pairing": "passed",
+      "identical_names_stay_on_correct_pc": "passed",
+      "javascript_errors": []
+    }
+  },
+  "responsive": [
+    {
+      "page": "dashboard",
+      "width": 390,
+      "result": "passed"
+    },
+    {
+      "page": "detail",
+      "width": 390,
+      "result": "passed"
+    },
+    {
+      "page": "printers",
+      "width": 390,
+      "result": "passed"
+    },
+    {
+      "page": "schedule",
+      "width": 390,
+      "result": "passed"
+    },
+    {
+      "page": "dashboard",
+      "width": 768,
+      "result": "passed"
+    },
+    {
+      "page": "detail",
+      "width": 768,
+      "result": "passed"
+    },
+    {
+      "page": "printers",
+      "width": 768,
+      "result": "passed"
+    },
+    {
+      "page": "schedule",
+      "width": 768,
+      "result": "passed"
+    },
+    {
+      "page": "dashboard",
+      "width": 1366,
+      "result": "passed"
+    },
+    {
+      "page": "detail",
+      "width": 1366,
+      "result": "passed"
+    },
+    {
+      "page": "printers",
+      "width": 1366,
+      "result": "passed"
+    },
+    {
+      "page": "schedule",
+      "width": 1366,
+      "result": "passed"
+    },
+    {
+      "page": "dashboard",
+      "width": 1920,
+      "result": "passed"
+    },
+    {
+      "page": "detail",
+      "width": 1920,
+      "result": "passed"
+    },
+    {
+      "page": "printers",
+      "width": 1920,
+      "result": "passed"
+    },
+    {
+      "page": "schedule",
+      "width": 1920,
+      "result": "passed"
+    }
+  ],
+  "admin_installer_download": "passed",
+  "per_branch_print_menu": "passed",
+  "change_printer_and_paper_from_branch": "passed",
+  "kiosk_settings_hidden": "passed",
+  "legacy_pending_uuid_recovery": "passed",
+  "isolated_ticket_count": 1
+}
